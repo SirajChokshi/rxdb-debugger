@@ -1,6 +1,6 @@
 import type { RxDatabase } from "rxdb/plugins/core";
 import { render } from "solid-js/web";
-import { RxdbDebugger } from "../core.js";
+import { RxdbDebugger } from "@rxdb-debugger/core";
 import { Debugger, type PanelId } from "./components/Debugger.js";
 import { getTheme, type Theme } from "./styles/theme.js";
 

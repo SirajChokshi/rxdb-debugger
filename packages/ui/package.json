@@ -1,9 +1,7 @@
 {
-  "name": "@rxdb-debugger/core",
+  "name": "@rxdb-debugger/ui",
   "version": "0.1.0",
-  "description": "Headless RxDB debugger with live/snapshot query support",
-  "homepage": "https://github.com/sirajchokshi/rxdb-debugger/tree/main/packages/core#readme",
-  "license": "MIT",
+  "description": "SolidJS UI components for RxDB debugger",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -15,26 +13,21 @@
   },
   "files": ["dist"],
   "sideEffects": false,
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/sirajchokshi/rxdb-debugger.git"
-  },
   "scripts": {
     "build": "tsdown",
     "dev": "tsdown --watch",
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
-    "rxdb": ">=15.0.0",
-    "rxjs": ">=7.0.0"
+    "@rxdb-debugger/core": ">=0.1.0",
+    "solid-js": "^1.9.0"
   },
   "devDependencies": {
+    "@rxdb-debugger/core": "workspace:*",
+    "rolldown-plugin-solid": "^0.2.0",
     "rxdb": "16.21.1",
-    "rxjs": "7.8.2",
+    "solid-js": "^1.9.0",
     "tsdown": "^0.20.1",
     "typescript": "^5.7.3"
-  },
-  "publishConfig": {
-    "access": "public"
   }
 }

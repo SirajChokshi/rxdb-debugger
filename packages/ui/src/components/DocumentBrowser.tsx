@@ -1,6 +1,5 @@
 import { createEffect, createSignal, For, onCleanup, Show } from "solid-js";
-import type { RxdbExplorer } from "../../core.js";
-import type { DocumentResult } from "../../documents.js";
+import type { RxdbExplorer, DocumentResult } from "@rxdb-debugger/core";
 import { css, ellipsis, flex, scrollable } from "../styles/css.js";
 import type { Theme } from "../styles/theme.js";
 
@@ -33,7 +32,7 @@ export function DocumentBrowser(props: DocumentBrowserProps) {
       .observe()
       .subscribe({
         next: setTotalCount,
-        error: () => {},
+        error: () => { },
       });
 
     // Get documents

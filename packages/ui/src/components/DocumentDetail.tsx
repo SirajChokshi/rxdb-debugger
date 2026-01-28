@@ -7,7 +7,7 @@ import {
   Show,
   Switch,
 } from "solid-js";
-import type { DocumentResult } from "../../documents.js";
+import type { DocumentResult } from "@rxdb-debugger/core";
 import { css, flex, scrollable } from "../styles/css.js";
 import type { Theme } from "../styles/theme.js";
 

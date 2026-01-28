@@ -1,7 +1,5 @@
 import { createEffect, createSignal, For, onCleanup, Show } from "solid-js";
-import type { CollectionInfo } from "../../catalog.js";
-import type { RxdbExplorer } from "../../core.js";
-import type { DocumentResult } from "../../documents.js";
+import type { CollectionInfo, RxdbExplorer, DocumentResult } from "@rxdb-debugger/core";
 import { css, flex, resetStyles, scrollable } from "../styles/css.js";
 import type { Theme } from "../styles/theme.js";
 import { CollectionList } from "./CollectionList.js";

@@ -1,5 +1,5 @@
 /**
- * @lassie/rxdb-explorer
+ * @rxdb-debugger/core
  *
  * Headless RxDB debugger with live/snapshot query support.
  * Designed for building database inspection tools, debuggers, and admin UIs.

@@ -1,5 +1,5 @@
 import { createSignal, Match, Switch, type JSX } from "solid-js";
-import type { RxdbDebugger } from "../../core.js";
+import type { RxdbDebugger } from "@rxdb-debugger/core";
 import { css, flex, resetStyles } from "../styles/css.js";
 import type { Theme } from "../styles/theme.js";
 import { CollectionsPanel } from "./panels/CollectionsPanel.js";

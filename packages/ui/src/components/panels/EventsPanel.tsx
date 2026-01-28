@@ -1,6 +1,5 @@
 import { createEffect, createSignal, For, onCleanup, Show, type JSX } from "solid-js";
-import type { RxdbDebugger } from "../../../core.js";
-import type { ChangeEvent } from "../../../events.js";
+import type { RxdbDebugger, ChangeEvent } from "@rxdb-debugger/core";
 import { css, ellipsis, flex, scrollable } from "../../styles/css.js";
 import type { Theme } from "../../styles/theme.js";
 import { Button } from "../shared/Button.js";

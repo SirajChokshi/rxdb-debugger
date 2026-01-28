@@ -1,5 +1,5 @@
 import { For, Show } from "solid-js";
-import type { CollectionInfo } from "../../catalog.js";
+import type { CollectionInfo } from "@rxdb-debugger/core";
 import { css, ellipsis, flex, scrollable } from "../styles/css.js";
 import type { Theme } from "../styles/theme.js";
 

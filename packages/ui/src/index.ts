@@ -1,5 +1,5 @@
 /**
- * @lassie/rxdb-explorer/ui
+ * @rxdb-debugger/ui
  *
  * SolidJS-based UI for debugging RxDB databases.
  * Designed to be mounted into any framework via portal pattern.

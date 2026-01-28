@@ -1,5 +1,5 @@
 import { For, Show, type JSX } from "solid-js";
-import type { DiffChange } from "../../../documents.js";
+import type { DiffChange } from "@rxdb-debugger/core";
 import { css, scrollable } from "../../styles/css.js";
 import type { Theme } from "../../styles/theme.js";
 
