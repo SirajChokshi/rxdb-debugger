@@ -1,0 +1,26 @@
+{
+  "name": "@rxdb-debugger/chrome-extension",
+  "version": "0.1.0",
+  "description": "Chrome DevTools extension for debugging RxDB databases",
+  "license": "MIT",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite build --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@rxdb-debugger/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.287",
+    "rxdb": "16.21.1",
+    "rxjs": "7.8.2",
+    "solid-js": "^1.9.0",
+    "typescript": "5.7.3",
+    "vite": "^6.0.7",
+    "vite-plugin-solid": "^2.11.0",
+    "vite-plugin-static-copy": "^2.2.0"
+  }
+}

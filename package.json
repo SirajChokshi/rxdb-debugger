@@ -2,7 +2,8 @@
   "name": "rxdb-debugger-monorepo",
   "license": "MIT",
   "scripts": {
-    "build": "bunup",
+    "build": "bunup && bun run --filter @rxdb-debugger/core build:ui",
+    "build:extension": "bun run --filter @rxdb-debugger/chrome-extension build",
     "dev": "bunup --watch",
     "type-check": "bun run --filter '*' type-check"
   },

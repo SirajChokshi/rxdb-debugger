@@ -1,5 +1,10 @@
 {
 	"extends": "../../tsconfig.base.json",
-	"compilerOptions": { "declaration": true, "isolatedDeclarations": true },
-	"include": ["src/**/*"]
+	"compilerOptions": {
+		"jsx": "preserve",
+		"jsxImportSource": "solid-js"
+	},
+	"include": [
+		"src/**/*"
+	]
 }
