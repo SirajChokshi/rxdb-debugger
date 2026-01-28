@@ -1,5 +1,5 @@
 import { createEffect, createSignal, For, onCleanup, Show, type JSX } from "solid-js";
-import type { CollectionInfo, RxdbDebugger, PropertyInfo, SchemaDetails } from "@rxdb-debugger/core";
+import type { CollectionInfo, RxdbDebugger, PropertyInfo, SchemaDetails, Relationship } from "@rxdb-debugger/core";
 import { css, ellipsis, flex, scrollable } from "../../styles/css.js";
 import type { Theme } from "../../styles/theme.js";
 
@@ -8,11 +8,178 @@ export interface CollectionsPanelProps {
   debugger: RxdbDebugger;
 }
 
+interface PropertyTreeProps {
+  properties: PropertyInfo[];
+  depth: number;
+  theme: Theme;
+}
+
+function PropertyTree(props: PropertyTreeProps) {
+  const { theme, depth } = props;
+  const [expandedProps, setExpandedProps] = createSignal<Set<string>>(new Set());
+
+  const toggleExpanded = (path: string) => {
+    setExpandedProps((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) {
+        next.delete(path);
+      } else {
+        next.add(path);
+      }
+      return next;
+    });
+  };
+
+  const hasNestedContent = (prop: PropertyInfo): boolean => {
+    return !!(prop.properties?.length || prop.items || prop.enum?.length);
+  };
+
+  const formatConstraints = (prop: PropertyInfo): string => {
+    const parts: string[] = [];
+    if (prop.required) parts.push("required");
+    if (prop.maxLength) parts.push(`max: ${prop.maxLength}`);
+    if (prop.minimum !== undefined) parts.push(`min: ${prop.minimum}`);
+    if (prop.maximum !== undefined) parts.push(`max: ${prop.maximum}`);
+    if (prop.pattern) parts.push("pattern");
+    if (prop.ref) parts.push(`→ ${prop.ref}`);
+    return parts.join(", ");
+  };
+
+  const propertyRowStyle = css(flex.row, {
+    padding: `${theme.sizing.spacing.xs} 0`,
+    "font-size": "12px",
+    "border-bottom": `1px solid ${theme.colors.border}`,
+    "align-items": "flex-start",
+  });
+
+  const propertyNameStyle = css({
+    width: "140px",
+    "flex-shrink": "0",
+    "font-family": theme.fonts.mono,
+    color: theme.colors.accent,
+    display: "flex",
+    "align-items": "center",
+    gap: theme.sizing.spacing.xs,
+  });
+
+  const propertyTypeStyle = css({
+    width: "80px",
+    "flex-shrink": "0",
+    color: theme.colors.textSecondary,
+  });
+
+  const propertyInfoStyle = css({
+    flex: "1",
+    color: theme.colors.textMuted,
+    "font-size": "11px",
+  });
+
+  const expandButtonStyle = css({
+    background: "transparent",
+    border: "none",
+    color: theme.colors.textMuted,
+    cursor: "pointer",
+    padding: "0",
+    "font-size": "10px",
+    width: "14px",
+    "text-align": "center",
+  });
+
+  const nestedContainerStyle = css({
+    "padding-left": theme.sizing.spacing.md,
+    "border-left": `1px solid ${theme.colors.border}`,
+    "margin-left": theme.sizing.spacing.sm,
+  });
+
+  const enumListStyle = css({
+    "font-size": "11px",
+    color: theme.colors.textMuted,
+    "padding-left": theme.sizing.spacing.md,
+    "margin-top": theme.sizing.spacing.xs,
+  });
+
+  return (
+    <For each={props.properties}>
+      {(prop) => {
+        const isExpanded = () => expandedProps().has(prop.path);
+        const hasNested = hasNestedContent(prop);
+        return (
+          <>
+            <div style={propertyRowStyle}>
+              <span style={css(propertyNameStyle, { "padding-left": `${depth * 12}px` })}>
+                <Show when={hasNested}>
+                  <button style={expandButtonStyle} onClick={() => toggleExpanded(prop.path)}>
+                    {isExpanded() ? "▼" : "▶"}
+                  </button>
+                </Show>
+                <Show when={!hasNested}>
+                  <span style={{ width: "14px" }} />
+                </Show>
+                {prop.name}
+              </span>
+              <span style={propertyTypeStyle}>
+                {prop.type}
+                <Show when={prop.items}>
+                  {"<"}{prop.items!.type}{">"}
+                </Show>
+              </span>
+              <span style={propertyInfoStyle}>
+                {formatConstraints(prop)}
+                <Show when={prop.enum && !isExpanded()}>
+                  <span style={{ color: theme.colors.warning }}> enum({prop.enum!.length})</span>
+                </Show>
+              </span>
+            </div>
+            <Show when={isExpanded()}>
+              <Show when={prop.enum}>
+                <div style={enumListStyle}>
+                  <For each={prop.enum}>
+                    {(v) => (
+                      <div style={{ padding: "2px 0" }}>
+                        <span style={{ color: theme.colors.success }}>{JSON.stringify(v)}</span>
+                      </div>
+                    )}
+                  </For>
+                </div>
+              </Show>
+              <Show when={prop.properties}>
+                <div style={nestedContainerStyle}>
+                  <PropertyTree properties={prop.properties!} depth={depth + 1} theme={theme} />
+                </div>
+              </Show>
+              <Show when={prop.items?.properties}>
+                <div style={nestedContainerStyle}>
+                  <div style={{ "font-size": "10px", color: theme.colors.textMuted, "margin-bottom": theme.sizing.spacing.xs }}>
+                    Array items:
+                  </div>
+                  <PropertyTree properties={prop.items!.properties!} depth={depth + 1} theme={theme} />
+                </div>
+              </Show>
+            </Show>
+          </>
+        );
+      }}
+    </For>
+  );
+}
+
 export function CollectionsPanel(props: CollectionsPanelProps) {
   const [collections, setCollections] = createSignal<CollectionInfo[]>([]);
   const [selectedCollection, setSelectedCollection] = createSignal<string | null>(null);
   const [schema, setSchema] = createSignal<SchemaDetails | null>(null);
   const [isLoading, setIsLoading] = createSignal(true);
+  const [error, setError] = createSignal<string | null>(null);
+  const [schemaLoading, setSchemaLoading] = createSignal(false);
+  const [schemaError, setSchemaError] = createSignal<string | null>(null);
+  const [relationships, setRelationships] = createSignal<Relationship[]>([]);
+  const [isMobile, setIsMobile] = createSignal(false);
+
+  createEffect(() => {
+    const checkWidth = () => setIsMobile(window.innerWidth < props.theme.breakpoints.tablet);
+    checkWidth();
+    window.addEventListener("resize", checkWidth);
+    onCleanup(() => window.removeEventListener("resize", checkWidth));
+  });
 
   createEffect(() => {
     const sub = props.debugger.catalog
@@ -22,8 +189,12 @@ export function CollectionsPanel(props: CollectionsPanelProps) {
         next: (cols) => {
           setCollections(cols);
           setIsLoading(false);
+          setError(null);
         },
-        error: () => setIsLoading(false),
+        error: (err) => {
+          setIsLoading(false);
+          setError(err instanceof Error ? err.message : "Failed to load collections");
+        },
       });
 
     onCleanup(() => sub.unsubscribe());
@@ -33,22 +204,41 @@ export function CollectionsPanel(props: CollectionsPanelProps) {
     const name = selectedCollection();
     if (!name) {
       setSchema(null);
+      setSchemaError(null);
       return;
     }
-    props.debugger.schema.getSchema(name).get().then(setSchema);
+    setSchemaLoading(true);
+    setSchemaError(null);
+    props.debugger.schema.getSchema(name).get()
+      .then((s) => {
+        setSchema(s);
+        setSchemaLoading(false);
+      })
+      .catch((err) => {
+        setSchemaError(err instanceof Error ? err.message : "Failed to load schema");
+        setSchemaLoading(false);
+      });
+  });
+
+  createEffect(() => {
+    props.debugger.schema.getRelationships().get()
+      .then(setRelationships)
+      .catch(() => setRelationships([]));
   });
 
   const { theme } = props;
 
-  const containerStyle = css(flex.row, {
+  const containerStyle = css(isMobile() ? flex.col : flex.row, {
     height: "100%",
     overflow: "hidden",
   });
 
   const listStyle = css(flex.col, {
-    width: "240px",
+    width: isMobile() ? "100%" : "240px",
+    "max-height": isMobile() ? "40%" : "100%",
     "flex-shrink": "0",
-    "border-right": `1px solid ${theme.colors.border}`,
+    "border-right": isMobile() ? "none" : `1px solid ${theme.colors.border}`,
+    "border-bottom": isMobile() ? `1px solid ${theme.colors.border}` : "none",
     overflow: "hidden",
   });
 
@@ -146,18 +336,6 @@ export function CollectionsPanel(props: CollectionsPanelProps) {
     return String(count);
   };
 
-  const getPropertyConstraints = (prop: PropertyInfo): string => {
-    const constraints: string[] = [];
-    if (prop.required) constraints.push("required");
-    if (prop.maxLength) constraints.push(`max: ${prop.maxLength}`);
-    if (prop.minimum !== undefined) constraints.push(`min: ${prop.minimum}`);
-    if (prop.maximum !== undefined) constraints.push(`max: ${prop.maximum}`);
-    if (prop.pattern) constraints.push("pattern");
-    if (prop.enum) constraints.push(`enum(${prop.enum.length})`);
-    if (prop.ref) constraints.push(`ref: ${prop.ref}`);
-    return constraints.join(", ");
-  };
-
   return (
     <div style={containerStyle}>
       <div style={listStyle}>
@@ -166,6 +344,16 @@ export function CollectionsPanel(props: CollectionsPanelProps) {
           <Show when={isLoading()}>
             <div style={{ padding: theme.sizing.spacing.md, color: theme.colors.textMuted }}>
               Loading...
+            </div>
+          </Show>
+          <Show when={error()}>
+            <div style={{ padding: theme.sizing.spacing.md, color: theme.colors.error, background: `${theme.colors.error}15`, "border-radius": theme.sizing.borderRadius }}>
+              {error()}
+            </div>
+          </Show>
+          <Show when={!isLoading() && !error() && collections().length === 0}>
+            <div style={{ padding: theme.sizing.spacing.md, color: theme.colors.textMuted, "text-align": "center" }}>
+              No collections found
             </div>
           </Show>
           <For each={collections()}>
@@ -196,11 +384,22 @@ export function CollectionsPanel(props: CollectionsPanelProps) {
       </div>
 
       <div style={detailStyle}>
-        <Show when={schema()} fallback={
+        <Show when={schemaLoading()}>
+          <div style={{ color: theme.colors.textMuted }}>
+            Loading schema...
+          </div>
+        </Show>
+        <Show when={schemaError()}>
+          <div style={{ color: theme.colors.error, background: `${theme.colors.error}15`, padding: theme.sizing.spacing.md, "border-radius": theme.sizing.borderRadius }}>
+            {schemaError()}
+          </div>
+        </Show>
+        <Show when={!schemaLoading() && !schemaError() && !schema() && !selectedCollection()}>
           <div style={{ color: theme.colors.textMuted }}>
             Select a collection to view its schema
           </div>
-        }>
+        </Show>
+        <Show when={schema()}>
           {(s) => (
             <>
               <div style={sectionStyle}>
@@ -214,15 +413,7 @@ export function CollectionsPanel(props: CollectionsPanelProps) {
 
               <div style={sectionStyle}>
                 <div style={sectionTitleStyle}>Properties ({s().properties.length})</div>
-                <For each={s().properties}>
-                  {(prop) => (
-                    <div style={propertyRowStyle}>
-                      <span style={propertyNameStyle}>{prop.name}</span>
-                      <span style={propertyTypeStyle}>{prop.type}</span>
-                      <span style={propertyInfoStyle}>{getPropertyConstraints(prop)}</span>
-                    </div>
-                  )}
-                </For>
+                <PropertyTree properties={s().properties} depth={0} theme={theme} />
               </div>
 
               <Show when={s().indexes.length > 0}>
@@ -240,6 +431,52 @@ export function CollectionsPanel(props: CollectionsPanelProps) {
                   </div>
                 </div>
               </Show>
+
+              {(() => {
+                const collName = s().name;
+                const outgoing = relationships().filter(r => r.from.collection === collName);
+                const incoming = relationships().filter(r => r.to.collection === collName);
+                const hasRelations = outgoing.length > 0 || incoming.length > 0;
+                return (
+                  <Show when={hasRelations}>
+                    <div style={sectionStyle}>
+                      <div style={sectionTitleStyle}>Relationships</div>
+                      <Show when={outgoing.length > 0}>
+                        <div style={{ "margin-bottom": theme.sizing.spacing.sm }}>
+                          <div style={{ "font-size": "11px", color: theme.colors.textMuted, "margin-bottom": theme.sizing.spacing.xs }}>
+                            References
+                          </div>
+                          <For each={outgoing}>
+                            {(rel) => (
+                              <div style={{ "font-size": "12px", padding: `${theme.sizing.spacing.xs} 0` }}>
+                                <span style={{ "font-family": theme.fonts.mono, color: theme.colors.accent }}>{rel.from.field}</span>
+                                <span style={{ color: theme.colors.textMuted }}> → </span>
+                                <span style={{ color: theme.colors.success }}>{rel.to.collection}</span>
+                              </div>
+                            )}
+                          </For>
+                        </div>
+                      </Show>
+                      <Show when={incoming.length > 0}>
+                        <div>
+                          <div style={{ "font-size": "11px", color: theme.colors.textMuted, "margin-bottom": theme.sizing.spacing.xs }}>
+                            Referenced by
+                          </div>
+                          <For each={incoming}>
+                            {(rel) => (
+                              <div style={{ "font-size": "12px", padding: `${theme.sizing.spacing.xs} 0` }}>
+                                <span style={{ color: theme.colors.warning }}>{rel.from.collection}</span>
+                                <span style={{ color: theme.colors.textMuted }}>.</span>
+                                <span style={{ "font-family": theme.fonts.mono, color: theme.colors.accent }}>{rel.from.field}</span>
+                              </div>
+                            )}
+                          </For>
+                        </div>
+                      </Show>
+                    </div>
+                  </Show>
+                );
+              })()}
             </>
           )}
         </Show>

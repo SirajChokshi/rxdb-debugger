@@ -144,14 +144,3 @@ export function mountDebugger(options: MountDebuggerOptions): () => void {
   };
 }
 
-/**
- * @deprecated Use mountDebugger instead. mountExplorer is kept for backward compatibility.
- */
-export function mountExplorer(options: MountExplorerOptions): () => void {
-  return mountDebugger(options);
-}
-
-/**
- * @deprecated Use MountDebuggerOptions instead.
- */
-export type MountExplorerOptions = MountDebuggerOptions;

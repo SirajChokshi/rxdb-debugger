@@ -55,12 +55,3 @@ export const ellipsis: JSX.CSSProperties = {
 export const scrollable: JSX.CSSProperties = {
   overflow: "auto",
 };
-
-/**
- * Hide scrollbar but keep scrollable.
- */
-export const hideScrollbar: JSX.CSSProperties = {
-  overflow: "auto",
-  "scrollbar-width": "none",
-  "-ms-overflow-style": "none",
-};

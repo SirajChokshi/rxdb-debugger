@@ -7,9 +7,7 @@
 
 export {
   mountDebugger,
-  mountExplorer,
   type MountDebuggerOptions,
-  type MountExplorerOptions,
 } from "./mount.js";
 
 export { type PanelId } from "./components/Debugger.js";

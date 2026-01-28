@@ -33,6 +33,11 @@ export interface Theme {
       xl: string;
     };
   };
+  breakpoints: {
+    mobile: number;
+    tablet: number;
+    desktop: number;
+  };
 }
 
 const darkTheme: Theme = {
@@ -66,6 +71,11 @@ const darkTheme: Theme = {
       xl: "24px",
     },
   },
+  breakpoints: {
+    mobile: 480,
+    tablet: 768,
+    desktop: 1024,
+  },
 };
 
 const lightTheme: Theme = {
@@ -98,6 +108,11 @@ const lightTheme: Theme = {
       lg: "16px",
       xl: "24px",
     },
+  },
+  breakpoints: {
+    mobile: 480,
+    tablet: 768,
+    desktop: 1024,
   },
 };
 

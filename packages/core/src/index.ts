@@ -13,9 +13,7 @@ export {
 
 export {
   RxdbDebugger,
-  RxdbExplorer,
   type DebuggerOptions,
-  type RxdbExplorerOptions,
 } from "./core.js";
 
 export {
@@ -61,7 +59,6 @@ export {
 } from "./performance.js";
 
 export {
-  createAsyncQuery,
   createQuery,
   createStaticQuery,
   type ExplorerQuery,
@@ -80,7 +77,6 @@ export {
 
 export {
   createMemoizedResolver,
-  resolveDb,
   type DbInput,
 } from "./resolver.js";
 
@@ -93,3 +89,9 @@ export {
   type SchemaDetails,
   type SchemaService,
 } from "./schema.js";
+
+export {
+  createHistoryService,
+  type DocumentVersion,
+  type HistoryService,
+} from "./history.js";

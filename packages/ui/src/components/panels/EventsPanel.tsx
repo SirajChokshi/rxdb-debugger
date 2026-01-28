@@ -3,6 +3,8 @@ import type { RxdbDebugger, ChangeEvent } from "@rxdb-debugger/core";
 import { css, ellipsis, flex, scrollable } from "../../styles/css.js";
 import type { Theme } from "../../styles/theme.js";
 import { Button } from "../shared/Button.js";
+import { JsonDiff } from "../shared/JsonDiff.js";
+import { JsonViewer } from "../shared/JsonViewer.js";
 
 export interface EventsPanelProps {
   theme: Theme;
@@ -14,6 +16,7 @@ export function EventsPanel(props: EventsPanelProps) {
   const [isPaused, setIsPaused] = createSignal(false);
   const [selectedEvent, setSelectedEvent] = createSignal<ChangeEvent | null>(null);
   const [filter, setFilter] = createSignal<string>("");
+  const [error, setError] = createSignal<string | null>(null);
 
   createEffect(() => {
     const sub = props.debugger.events
@@ -24,6 +27,10 @@ export function EventsPanel(props: EventsPanelProps) {
           if (!isPaused()) {
             setEvents((prev) => [event, ...prev].slice(0, 200));
           }
+          setError(null);
+        },
+        error: (err) => {
+          setError(err instanceof Error ? err.message : "Failed to stream events");
         },
       });
 
@@ -185,6 +192,11 @@ export function EventsPanel(props: EventsPanelProps) {
         </div>
 
         <div style={eventListStyle}>
+          <Show when={error()}>
+            <div style={{ padding: theme.sizing.spacing.md, margin: theme.sizing.spacing.md, color: theme.colors.error, background: `${theme.colors.error}15`, "border-radius": theme.sizing.borderRadius }}>
+              {error()}
+            </div>
+          </Show>
           <For each={filteredEvents()} fallback={
             <div style={{ padding: theme.sizing.spacing.xl, "text-align": "center", color: theme.colors.textMuted }}>
               No events yet. Changes to documents will appear here.
@@ -242,16 +254,27 @@ export function EventsPanel(props: EventsPanelProps) {
                 <div style={{ color: theme.colors.textMuted, "margin-bottom": "4px" }}>Document ID</div>
                 <div>{event().documentId}</div>
               </div>
-              <Show when={event().data}>
+              <Show when={event().operation === "UPDATE" && event().previousData && event().data}>
                 <div style={{ "margin-bottom": theme.sizing.spacing.md }}>
-                  <div style={{ color: theme.colors.textMuted, "margin-bottom": "4px" }}>Data</div>
-                  <div>{JSON.stringify(event().data, null, 2)}</div>
+                  <div style={{ color: theme.colors.textMuted, "margin-bottom": "4px" }}>Changes</div>
+                  {(() => {
+                    const docA = { id: "prev", data: event().previousData as Record<string, unknown> };
+                    const docB = { id: "curr", data: event().data as Record<string, unknown> };
+                    const diff = props.debugger.documents.compare(docA, docB);
+                    return <JsonDiff theme={theme} changes={diff.changes} />;
+                  })()}
                 </div>
               </Show>
-              <Show when={event().previousData}>
+              <Show when={event().operation !== "UPDATE" && event().data}>
+                <div style={{ "margin-bottom": theme.sizing.spacing.md }}>
+                  <div style={{ color: theme.colors.textMuted, "margin-bottom": "4px" }}>Data</div>
+                  <JsonViewer theme={theme} data={event().data} collapsed={false} />
+                </div>
+              </Show>
+              <Show when={event().operation !== "UPDATE" && event().previousData}>
                 <div>
                   <div style={{ color: theme.colors.textMuted, "margin-bottom": "4px" }}>Previous Data</div>
-                  <div>{JSON.stringify(event().previousData, null, 2)}</div>
+                  <JsonViewer theme={theme} data={event().previousData} collapsed={false} />
                 </div>
               </Show>
             </div>

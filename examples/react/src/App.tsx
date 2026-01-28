@@ -233,15 +233,7 @@ export default function App() {
 
     Promise.all([
       import("@rxdb-debugger/core"),
-      import("@rxdb-debugger/core/ui") as unknown as Promise<{
-        mountDebugger: (opts: {
-          container: HTMLElement;
-          db: unknown;
-          theme?: string;
-          trackPerformance?: boolean;
-          initialPanel?: string;
-        }) => () => void;
-      }>,
+      import("@rxdb-debugger/ui"),
     ]).then(([{ RxdbDebugger }, { mountDebugger }]) => {
       if (!debuggerRef.current) return;
       const debuggerInstance = new RxdbDebugger({ db, trackPerformance: true });

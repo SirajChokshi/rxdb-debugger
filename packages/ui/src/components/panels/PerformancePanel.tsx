@@ -13,11 +13,21 @@ export function PerformancePanel(props: PerformancePanelProps) {
   const [metrics, setMetrics] = createSignal<PerformanceMetrics | null>(null);
   const [slowOps, setSlowOps] = createSignal<OperationLog[]>([]);
   const [isTracking, setIsTracking] = createSignal(false);
+  const [error, setError] = createSignal<string | null>(null);
 
-  const refreshMetrics = () => {
-    props.debugger.performance.getMetrics().get().then(setMetrics);
-    props.debugger.performance.getSlowOperations(50).get().then(setSlowOps);
-    setIsTracking(props.debugger.performance.isTracking());
+  const refreshMetrics = async () => {
+    try {
+      const [m, ops] = await Promise.all([
+        props.debugger.performance.getMetrics().get(),
+        props.debugger.performance.getSlowOperations(50).get(),
+      ]);
+      setMetrics(m);
+      setSlowOps(ops);
+      setIsTracking(props.debugger.performance.isTracking());
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load performance metrics");
+    }
   };
 
   createEffect(() => {
@@ -199,6 +209,11 @@ export function PerformancePanel(props: PerformancePanelProps) {
 
       <div style={contentStyle}>
         <div style={metricsStyle}>
+          <Show when={error()}>
+            <div style={{ color: theme.colors.error, background: `${theme.colors.error}15`, padding: theme.sizing.spacing.md, "border-radius": theme.sizing.borderRadius, "margin-bottom": theme.sizing.spacing.md }}>
+              {error()}
+            </div>
+          </Show>
           <Show when={metrics()} fallback={
             <div style={{ color: theme.colors.textMuted }}>
               Start tracking to see performance metrics
@@ -268,6 +283,49 @@ export function PerformancePanel(props: PerformancePanelProps) {
         </div>
 
         <div style={slowOpsStyle}>
+          <Show when={slowOps().length > 0}>
+            <div style={{ "margin-bottom": theme.sizing.spacing.lg }}>
+              <div style={sectionTitleStyle}>Operation Timeline</div>
+              <div style={{ background: theme.colors.bgSecondary, "border-radius": theme.sizing.borderRadius, padding: theme.sizing.spacing.sm }}>
+                <svg width="100%" height="80" style={{ display: "block" }}>
+                  {(() => {
+                    const ops = slowOps();
+                    const maxDuration = Math.max(...ops.map(o => o.duration), 100);
+                    const barWidth = 100 / Math.max(ops.length, 1);
+                    return (
+                      <>
+                        <For each={ops}>
+                          {(op, i) => {
+                            const height = Math.min((op.duration / maxDuration) * 60, 60);
+                            const color = op.duration > 100 ? theme.colors.error : op.duration > 50 ? theme.colors.warning : theme.colors.success;
+                            return (
+                              <g>
+                                <rect
+                                  x={`${i() * barWidth}%`}
+                                  y={70 - height}
+                                  width={`${barWidth * 0.8}%`}
+                                  height={height}
+                                  fill={color}
+                                  rx="2"
+                                >
+                                  <title>{op.type}: {op.collection} - {formatDuration(op.duration)}</title>
+                                </rect>
+                              </g>
+                            );
+                          }}
+                        </For>
+                        <line x1="0" y1="70" x2="100%" y2="70" stroke={theme.colors.border} stroke-width="1" />
+                      </>
+                    );
+                  })()}
+                </svg>
+                <div style={css(flex.row, flex.between, { "font-size": "10px", color: theme.colors.textMuted, "margin-top": theme.sizing.spacing.xs })}>
+                  <span>Oldest</span>
+                  <span>Most Recent</span>
+                </div>
+              </div>
+            </div>
+          </Show>
           <div style={sectionTitleStyle}>Slow Operations (&gt;50ms)</div>
           <For each={slowOps()} fallback={
             <div style={{ color: theme.colors.textMuted, "font-size": "12px" }}>

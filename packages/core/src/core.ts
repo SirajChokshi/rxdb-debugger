@@ -8,6 +8,7 @@ import { createPerformanceService, type PerformanceService } from "./performance
 import { createQueryService, type QueryService } from "./query-playground.js";
 import { createMemoizedResolver, type DbInput } from "./resolver.js";
 import { createSchemaService, type SchemaService } from "./schema.js";
+import { createHistoryService, type HistoryService } from "./history.js";
 
 /**
  * Options for creating an RxDB Debugger instance.
@@ -94,6 +95,11 @@ export class RxdbDebugger<T extends RxDatabase = RxDatabase> {
    */
   public readonly export: ExportService;
 
+  /**
+   * Service for tracking document version history.
+   */
+  public readonly history: HistoryService;
+
   constructor(options: DebuggerOptions<T>) {
     const {
       db,
@@ -118,6 +124,8 @@ export class RxdbDebugger<T extends RxDatabase = RxDatabase> {
     this.performance = this._performance;
 
     this.export = createExportService(this.getDb);
+
+    this.history = createHistoryService(this._events);
 
     if (trackPerformance) {
       this._performance.start();
@@ -159,16 +167,3 @@ export class RxdbDebugger<T extends RxDatabase = RxDatabase> {
   }
 }
 
-/**
- * @deprecated Use RxdbDebugger instead. RxdbExplorer is kept for backward compatibility.
- */
-export class RxdbExplorer<T extends RxDatabase = RxDatabase> extends RxdbDebugger<T> {
-  constructor(options: { db: DbInput<T> }) {
-    super(options);
-  }
-}
-
-/**
- * @deprecated Use DebuggerOptions instead.
- */
-export type RxdbExplorerOptions<T extends RxDatabase = RxDatabase> = DebuggerOptions<T>;

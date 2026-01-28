@@ -24,7 +24,10 @@ export function Tabs(props: TabsProps) {
     "border-bottom": `1px solid ${theme.colors.border}`,
     background: theme.colors.bgSecondary,
     "flex-shrink": "0",
-    overflow: "hidden",
+    "overflow-x": "auto",
+    "overflow-y": "hidden",
+    "-webkit-overflow-scrolling": "touch",
+    "scrollbar-width": "thin",
   });
 
   const tabStyle = (isActive: boolean): JSX.CSSProperties =>

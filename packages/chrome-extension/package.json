@@ -12,7 +12,8 @@
   },
   "dependencies": {
     "@rxdb-debugger/core": "workspace:*",
-    "@rxdb-debugger/ui": "workspace:*"
+    "@rxdb-debugger/ui": "workspace:*",
+    "rxjs": "^7.8.0"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.287",
