@@ -1,6 +1,6 @@
 import type { RxChangeEvent, RxCollection, RxDatabase } from "rxdb/plugins/core";
-import { merge, Observable, Subject, BehaviorSubject } from "rxjs";
-import { filter, map, scan, shareReplay, takeUntil } from "rxjs/operators";
+import { Observable, Subject, BehaviorSubject } from "rxjs";
+import { filter, map, take, takeUntil } from "rxjs/operators";
 import { createQuery, createStaticQuery, type ExplorerQuery } from "./query.js";
 
 /**
@@ -179,17 +179,15 @@ export function createEventsService(
     }
   };
 
-  const sharedEvents$ = eventSubject.asObservable().pipe(
-    shareReplay({ bufferSize: 1, refCount: true }),
-  );
-
   return {
     stream(options: EventStreamOptions = {}): ExplorerQuery<ChangeEvent> {
       const { collections, operations } = options;
 
       const source$ = new Observable<ChangeEvent>((subscriber) => {
+        let innerSub: { unsubscribe: () => void } | null = null;
+
         initialize().then(() => {
-          const sub = sharedEvents$
+          innerSub = eventSubject
             .pipe(
               filter((event) => {
                 if (collections && !collections.includes(event.collection)) {
@@ -202,12 +200,28 @@ export function createEventsService(
               }),
             )
             .subscribe(subscriber);
-
-          return () => sub.unsubscribe();
         }).catch((err) => subscriber.error(err));
+
+        return () => {
+          if (innerSub) {
+            innerSub.unsubscribe();
+          }
+        };
       });
 
-      return createQuery(source$, { live: true });
+      return {
+        async get(): Promise<ChangeEvent> {
+          return new Promise((resolve, reject) => {
+            source$.pipe(take(1)).subscribe({
+              next: resolve,
+              error: reject,
+            });
+          });
+        },
+        observe(): Observable<ChangeEvent> {
+          return source$;
+        },
+      };
     },
 
     history(options: EventHistoryOptions = {}): ExplorerQuery<ChangeEvent[]> {

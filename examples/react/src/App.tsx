@@ -75,7 +75,7 @@ type DebuggerDock = "bottom" | "right";
 // APP
 // ============================================================================
 
-export default function App() {
+export default function App(): JSX.Element {
   const [db, setDb] = useState<RxDatabase | null>(null);
   const [isSeeded, setIsSeeded] = useState(false);
   const [isSeeding, setIsSeeding] = useState(false);
@@ -332,7 +332,7 @@ export default function App() {
 
   if (!db) {
     return (
-      <div className="flex items-center justify-center h-screen bg-black">
+      <div className="flex items-center justify-center h-screen bg-black select-none">
         <div className="text-center">
           <div className="w-12 h-12 border-4 border-green-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
           <p className="text-neutral-400">Loading...</p>
@@ -342,7 +342,7 @@ export default function App() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-black text-white overflow-hidden">
+    <div className="h-screen flex flex-col bg-black text-white overflow-hidden select-none">
       {/* Main Layout */}
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
@@ -478,8 +478,8 @@ export default function App() {
       {showDebugger && (
         <div
           className={`fixed bg-neutral-950 border-neutral-800 shadow-2xl z-50 flex flex-col transition-all duration-200 ${debuggerDock === "bottom"
-              ? "inset-x-0 bottom-0 border-t"
-              : "top-0 right-0 bottom-0 border-l"
+            ? "inset-x-0 bottom-0 border-t"
+            : "top-0 right-0 bottom-0 border-l"
             }`}
           style={{
             height: debuggerDock === "bottom" ? (isMinimized ? 44 : debuggerHeight) : "100%",
@@ -490,8 +490,8 @@ export default function App() {
           <div
             onMouseDown={handleResizeStart}
             className={`absolute bg-transparent hover:bg-orange-500/30 transition-colors ${debuggerDock === "bottom"
-                ? "top-0 left-0 right-0 h-1 cursor-ns-resize"
-                : "top-0 left-0 bottom-0 w-1 cursor-ew-resize"
+              ? "top-0 left-0 right-0 h-1 cursor-ns-resize"
+              : "top-0 left-0 bottom-0 w-1 cursor-ew-resize"
               }`}
           />
 
@@ -557,8 +557,8 @@ export default function App() {
                 <span
                   key={event.id}
                   className={`text-xs px-2 py-0.5 rounded ${event.operation === "INSERT" ? "bg-green-500/20 text-green-400" :
-                      event.operation === "UPDATE" ? "bg-yellow-500/20 text-yellow-400" :
-                        "bg-red-500/20 text-red-400"
+                    event.operation === "UPDATE" ? "bg-yellow-500/20 text-yellow-400" :
+                      "bg-red-500/20 text-red-400"
                     }`}
                   style={{ opacity: 1 - (i * 0.2) }}
                 >
