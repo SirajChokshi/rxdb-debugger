@@ -1,7 +1,7 @@
 import type { RxChangeEvent, RxCollection, RxDatabase } from "rxdb/plugins/core";
 import { Observable, Subject, BehaviorSubject } from "rxjs";
 import { filter, map, take, takeUntil } from "rxjs/operators";
-import { createQuery, createStaticQuery, type ExplorerQuery } from "./query.js";
+import { createStaticQuery, type ExplorerQuery } from "./query.js";
 
 /**
  * Types of document operations.

@@ -1,6 +1,6 @@
 import type { RxCollection, RxDatabase, RxJsonSchema } from "rxdb/plugins/core";
 import { combineLatest, Observable, of } from "rxjs";
-import { map, switchMap } from "rxjs/operators";
+import { map } from "rxjs/operators";
 import { createQuery, type ExplorerQuery, type LiveOptions } from "./query.js";
 
 /**

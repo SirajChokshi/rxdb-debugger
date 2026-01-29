@@ -1,5 +1,5 @@
 import { NEVER, Observable, from, of } from "rxjs";
-import { map, shareReplay } from "rxjs/operators";
+import { shareReplay } from "rxjs/operators";
 
 /**
  * Evaluates an expression in the inspected page context.
@@ -89,7 +89,7 @@ function wrapDocument(data: Record<string, unknown>, collectionRef: { schema: { 
     ...data,
     
     // RxDocument-like interface
-    toJSON(withMetadata?: boolean) {
+    toJSON(_withMetadata?: boolean) {
       return data;
     },
     
@@ -176,7 +176,7 @@ function createRemoteCollection(info: RemoteCollectionInfo) {
     name,
     schema: schemaObj,
 
-    find(queryObj?: Record<string, unknown>) {
+    find(_queryObj?: Record<string, unknown>) {
       return createRemoteQuery(name, collectionRef);
     },
 

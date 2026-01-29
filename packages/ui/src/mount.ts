@@ -2,7 +2,7 @@ import type { RxDatabase } from "rxdb/plugins/core";
 import { render } from "solid-js/web";
 import { RxdbDebugger } from "@rxdb-debugger/core";
 import { Debugger, type PanelId } from "./components/Debugger.js";
-import { getTheme, type Theme } from "./styles/theme.js";
+import { getTheme } from "./styles/theme.js";
 
 /**
  * Loose database input type for the UI mount function.

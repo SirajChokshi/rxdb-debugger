@@ -25,7 +25,7 @@ export function createHistoryService(
   const historyBuffer: DocumentVersion[] = [];
   let versionIdCounter = 0;
 
-  const subscription = eventsService.stream().observe().subscribe({
+  eventsService.stream().observe().subscribe({
     next: (event: ChangeEvent) => {
       if (event.operation === "INSERT" || event.operation === "UPDATE" || event.operation === "DELETE") {
         const version: DocumentVersion = {

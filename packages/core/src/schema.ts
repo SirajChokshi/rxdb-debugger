@@ -1,5 +1,4 @@
 import type { RxCollection, RxDatabase, RxJsonSchema } from "rxdb/plugins/core";
-import { Observable } from "rxjs";
 import { createStaticQuery, type ExplorerQuery } from "./query.js";
 
 /**

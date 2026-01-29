@@ -294,26 +294,26 @@ export function CollectionsPanel(props: CollectionsPanelProps) {
     color: theme.colors.text,
   });
 
-  const propertyRowStyle = css(flex.row, {
+  const _propertyRowStyle = css(flex.row, {
     padding: `${theme.sizing.spacing.xs} 0`,
     "font-size": "12px",
     "border-bottom": `1px solid ${theme.colors.border}`,
   });
 
-  const propertyNameStyle = css({
+  const _propertyNameStyle = css({
     width: "140px",
     "flex-shrink": "0",
     "font-family": theme.fonts.mono,
     color: theme.colors.accent,
   });
 
-  const propertyTypeStyle = css({
+  const _propertyTypeStyle = css({
     width: "80px",
     "flex-shrink": "0",
     color: theme.colors.textSecondary,
   });
 
-  const propertyInfoStyle = css({
+  const _propertyInfoStyle = css({
     flex: "1",
     color: theme.colors.textMuted,
     "font-size": "11px",

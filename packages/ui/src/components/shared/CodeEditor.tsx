@@ -1,4 +1,4 @@
-import { createSignal, onMount, type JSX } from "solid-js";
+import { createSignal, type JSX } from "solid-js";
 import { css } from "../../styles/css.js";
 import type { Theme } from "../../styles/theme.js";
 

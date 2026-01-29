@@ -1,4 +1,4 @@
-import { BehaviorSubject, Observable } from "rxjs";
+import { BehaviorSubject } from "rxjs";
 import { map } from "rxjs/operators";
 import { createQuery, createStaticQuery, type ExplorerQuery } from "./query.js";
 

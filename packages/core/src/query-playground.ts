@@ -1,7 +1,6 @@
 import type {
   MangoQuery,
   MangoQuerySelector,
-  MangoQuerySortPart,
   RxCollection,
   RxDatabase,
   RxDocument,

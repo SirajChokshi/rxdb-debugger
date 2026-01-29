@@ -1,4 +1,4 @@
-import { createEffect, createSignal, For, Show, type JSX } from "solid-js";
+import { createEffect, createSignal, For, Show } from "solid-js";
 import type { RxdbDebugger, QueryDocument, QueryHistoryEntry, QueryExplanation } from "@rxdb-debugger/core";
 import { css, flex, scrollable } from "../../styles/css.js";
 import type { Theme } from "../../styles/theme.js";

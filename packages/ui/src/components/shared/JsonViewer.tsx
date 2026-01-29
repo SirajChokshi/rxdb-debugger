@@ -1,5 +1,5 @@
 import { For, Show, createSignal, createMemo, type JSX } from "solid-js";
-import { css, flex, scrollable } from "../../styles/css.js";
+import { css, scrollable } from "../../styles/css.js";
 import type { Theme } from "../../styles/theme.js";
 
 export interface JsonViewerProps {
@@ -46,7 +46,7 @@ function JsonNode(props: JsonNodeProps) {
   const { theme } = props;
   const [collapsed, setCollapsed] = createSignal(props.initialCollapsed && props.depth > 0);
 
-  const indent = () => props.depth * 16;
+  const _indent = () => props.depth * 16;
 
   const keyStyle: JSX.CSSProperties = {
     color: theme.colors.accent,

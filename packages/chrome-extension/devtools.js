@@ -2,7 +2,7 @@ chrome.devtools.panels.create(
   "RxDB",
   "",
   "panel.html",
-  (panel) => {
+  (_panel) => {
     console.log("RxDB Debugger panel created");
   }
 );

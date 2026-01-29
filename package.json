@@ -5,7 +5,9 @@
   "license": "MIT",
   "workspaces": ["packages/*", "examples/*"],
   "scripts": {
-    "build": "bun run --filter '@rxdb-debugger/*' build",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "build": "bun run lint && bun run --filter '@rxdb-debugger/*' build",
     "build:libs": "bun run --filter '@rxdb-debugger/core' build && bun run --filter '@rxdb-debugger/ui' build",
     "build:ext": "bun run --filter chrome-extension build",
     "dev": "bun run --filter '@rxdb-debugger/*' dev",
@@ -14,6 +16,7 @@
   },
   "devDependencies": {
     "@types/bun": "^1.3.6",
+    "oxlint": "^1.42.0",
     "typescript": "^5.7.3"
   }
 }
