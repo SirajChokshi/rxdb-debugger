@@ -4,6 +4,6 @@
   "description": "DevTools extension for debugging RxDB databases",
   "version": "0.1.0",
   "devtools_page": "devtools.html",
-  "permissions": [],
+  "permissions": ["scripting"],
   "host_permissions": ["<all_urls>"]
 }

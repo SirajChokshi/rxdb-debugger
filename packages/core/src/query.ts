@@ -94,35 +94,3 @@ export function createStaticQuery<T>(
     },
   };
 }
-
-/**
- * Create an ExplorerQuery that wraps an async factory function.
- * Each call to get() re-executes the factory (no caching).
- * observe() emits once per subscription.
- */
-export function createAsyncQuery<T>(
-  factory: () => Promise<T>,
-  options: LiveOptions = {},
-): ExplorerQuery<T> {
-  const { live = false } = options;
-
-  if (live) {
-    throw new Error(
-      "createAsyncQuery does not support live mode. Use createQuery with an Observable source.",
-    );
-  }
-
-  return {
-    get: factory,
-    observe(): Observable<T> {
-      return new Observable((subscriber) => {
-        factory()
-          .then((value) => {
-            subscriber.next(value);
-            subscriber.complete();
-          })
-          .catch((err) => subscriber.error(err));
-      });
-    },
-  };
-}

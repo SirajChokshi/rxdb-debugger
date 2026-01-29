@@ -1,62 +1,12 @@
-import { NEVER, Observable, from, of } from "rxjs";
+import { Observable, from, of, startWith, scan, map } from "rxjs";
 import { shareReplay } from "rxjs/operators";
-
-/**
- * Evaluates an expression in the inspected page context.
- * NOTE: chrome.devtools.inspectedWindow.eval does NOT await promises.
- */
-function evalInPage<T>(expression: string): Promise<T> {
-  return new Promise((resolve, reject) => {
-    chrome.devtools.inspectedWindow.eval(expression, (result, exceptionInfo) => {
-      if (exceptionInfo) {
-        reject(new Error(exceptionInfo.value || "Eval failed"));
-      } else {
-        resolve(result as T);
-      }
-    });
-  });
-}
-
-/**
- * Evaluates an async expression by storing the result in a temp variable and polling.
- */
-async function evalAsyncInPage<T>(asyncExpression: string, timeout = 5000): Promise<T> {
-  const tempVar = `__rxdb_debugger_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-  
-  // Start the async operation and store result when done
-  await evalInPage(`
-    (async () => {
-      try {
-        const result = await (${asyncExpression});
-        window['${tempVar}'] = { done: true, value: result };
-      } catch (e) {
-        window['${tempVar}'] = { done: true, error: e.message };
-      }
-    })();
-  `);
-
-  // Poll for the result
-  const startTime = Date.now();
-  while (Date.now() - startTime < timeout) {
-    const status = await evalInPage<{ done: boolean; value?: T; error?: string } | undefined>(
-      `window['${tempVar}']`
-    );
-    
-    if (status?.done) {
-      // Clean up
-      await evalInPage(`delete window['${tempVar}']`);
-      
-      if (status.error) {
-        throw new Error(status.error);
-      }
-      return status.value as T;
-    }
-    
-    await new Promise(r => setTimeout(r, 50));
-  }
-  
-  throw new Error("Timeout waiting for async result");
-}
+import { 
+  evalInPage, 
+  evalAsyncInPage, 
+  getCollectionChanges, 
+  getBridgeEvents,
+  type ChangeEventPayload 
+} from "./bridge.js";
 
 interface RemoteCollectionSchema {
   primaryPath: string;
@@ -152,7 +102,7 @@ export async function createRemoteDatabase(): Promise<unknown> {
   return {
     name: dbInfo.name,
     collections,
-    $: of(null),
+    $: getBridgeEvents(),
   };
 }
 
@@ -166,11 +116,19 @@ function createRemoteCollection(info: RemoteCollectionInfo) {
     jsonSchema: schema.jsonSchema,
   };
 
-  // Collection reference that documents will point to
   const collectionRef = {
     name,
     schema: schemaObj,
   };
+
+  const collectionChanges$ = getCollectionChanges(name);
+
+  const liveCount$ = collectionChanges$.pipe(
+    map((event) => (event.operation === "INSERT" ? 1 : event.operation === "DELETE" ? -1 : 0)),
+    scan((acc, delta) => Math.max(0, acc + delta), initialCount),
+    startWith(initialCount),
+    shareReplay(1)
+  );
 
   return {
     name,
@@ -185,8 +143,6 @@ function createRemoteCollection(info: RemoteCollectionInfo) {
     },
 
     count() {
-      const count$ = of(initialCount);
-      
       return {
         exec: async () => {
           return evalAsyncInPage<number>(`
@@ -197,11 +153,11 @@ function createRemoteCollection(info: RemoteCollectionInfo) {
             })()
           `);
         },
-        $: count$,
+        $: liveCount$,
       };
     },
 
-    $: NEVER,
+    $: collectionChanges$,
   };
 }
 

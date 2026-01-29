@@ -3,7 +3,6 @@ import { type CatalogService, createCatalogService } from "./catalog.js";
 import { createDocumentsService, type DocumentsService } from "./documents.js";
 import { createEventsService, type EventsService } from "./events.js";
 import { createExportService, type ExportService } from "./export.js";
-import { createMetadataService, type MetadataService } from "./metadata.js";
 import { createPerformanceService, type PerformanceService } from "./performance.js";
 import { createQueryService, type QueryService } from "./query-playground.js";
 import { createMemoizedResolver, type DbInput } from "./resolver.js";
@@ -66,11 +65,6 @@ export class RxdbDebugger<T extends RxDatabase = RxDatabase> {
   public readonly documents: DocumentsService;
 
   /**
-   * Service for database-level metadata.
-   */
-  public readonly metadata: MetadataService;
-
-  /**
    * Service for inspecting collection schemas.
    */
   public readonly schema: SchemaService;
@@ -113,7 +107,6 @@ export class RxdbDebugger<T extends RxDatabase = RxDatabase> {
 
     this.catalog = createCatalogService(this.getDb);
     this.documents = createDocumentsService(this.getDb);
-    this.metadata = createMetadataService(this.getDb);
     this.schema = createSchemaService(this.getDb);
     this.query = createQueryService(this.getDb, queryHistorySize);
 

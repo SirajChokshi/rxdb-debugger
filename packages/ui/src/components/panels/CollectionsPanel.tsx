@@ -1,7 +1,8 @@
 import { createEffect, createSignal, For, onCleanup, Show, type JSX } from "solid-js";
-import type { CollectionInfo, RxdbDebugger, PropertyInfo, SchemaDetails, Relationship } from "@rxdb-debugger/core";
+import type { RxdbDebugger, PropertyInfo, SchemaDetails, Relationship } from "@rxdb-debugger/core";
 import { css, ellipsis, flex, scrollable } from "../../styles/css.js";
 import type { Theme } from "../../styles/theme.js";
+import { fromExplorerQuery } from "../../utils/observable.js";
 
 export interface CollectionsPanelProps {
   theme: Theme;
@@ -164,40 +165,36 @@ function PropertyTree(props: PropertyTreeProps) {
 }
 
 export function CollectionsPanel(props: CollectionsPanelProps) {
-  const [collections, setCollections] = createSignal<CollectionInfo[]>([]);
   const [selectedCollection, setSelectedCollection] = createSignal<string | null>(null);
   const [schema, setSchema] = createSignal<SchemaDetails | null>(null);
-  const [isLoading, setIsLoading] = createSignal(true);
   const [error, setError] = createSignal<string | null>(null);
   const [schemaLoading, setSchemaLoading] = createSignal(false);
   const [schemaError, setSchemaError] = createSignal<string | null>(null);
   const [relationships, setRelationships] = createSignal<Relationship[]>([]);
   const [isMobile, setIsMobile] = createSignal(false);
+  const [searchQuery, setSearchQuery] = createSignal("");
+
+  const collections = fromExplorerQuery(
+    props.debugger.catalog.collections({ live: true }),
+    {
+      initialValue: [],
+      onError: (err) => setError(err instanceof Error ? err.message : "Failed to load collections"),
+    }
+  );
+
+  const isLoading = () => collections().length === 0 && !error();
+
+  const filteredCollections = () => {
+    const q = searchQuery().toLowerCase();
+    if (!q) return collections();
+    return collections().filter(c => c.name.toLowerCase().includes(q));
+  };
 
   createEffect(() => {
     const checkWidth = () => setIsMobile(window.innerWidth < props.theme.breakpoints.tablet);
     checkWidth();
     window.addEventListener("resize", checkWidth);
     onCleanup(() => window.removeEventListener("resize", checkWidth));
-  });
-
-  createEffect(() => {
-    const sub = props.debugger.catalog
-      .collections({ live: true })
-      .observe()
-      .subscribe({
-        next: (cols) => {
-          setCollections(cols);
-          setIsLoading(false);
-          setError(null);
-        },
-        error: (err) => {
-          setIsLoading(false);
-          setError(err instanceof Error ? err.message : "Failed to load collections");
-        },
-      });
-
-    onCleanup(() => sub.unsubscribe());
   });
 
   createEffect(() => {
@@ -242,14 +239,29 @@ export function CollectionsPanel(props: CollectionsPanelProps) {
     overflow: "hidden",
   });
 
-  const listHeaderStyle = css({
+  const listHeaderStyle = css(flex.col, {
     padding: theme.sizing.spacing.md,
+    gap: theme.sizing.spacing.sm,
+    "border-bottom": `1px solid ${theme.colors.border}`,
+  });
+
+  const listTitleStyle = css({
     "font-weight": "600",
     "font-size": "11px",
     "text-transform": "uppercase",
     "letter-spacing": "0.5px",
     color: theme.colors.textMuted,
-    "border-bottom": `1px solid ${theme.colors.border}`,
+  });
+
+  const searchInputStyle = css({
+    padding: `${theme.sizing.spacing.xs} ${theme.sizing.spacing.sm}`,
+    background: theme.colors.bgSecondary,
+    color: theme.colors.text,
+    border: `1px solid ${theme.colors.border}`,
+    "border-radius": theme.sizing.borderRadius,
+    "font-size": "12px",
+    outline: "none",
+    width: "100%",
   });
 
   const listContentStyle = css(scrollable, {
@@ -294,31 +306,6 @@ export function CollectionsPanel(props: CollectionsPanelProps) {
     color: theme.colors.text,
   });
 
-  const _propertyRowStyle = css(flex.row, {
-    padding: `${theme.sizing.spacing.xs} 0`,
-    "font-size": "12px",
-    "border-bottom": `1px solid ${theme.colors.border}`,
-  });
-
-  const _propertyNameStyle = css({
-    width: "140px",
-    "flex-shrink": "0",
-    "font-family": theme.fonts.mono,
-    color: theme.colors.accent,
-  });
-
-  const _propertyTypeStyle = css({
-    width: "80px",
-    "flex-shrink": "0",
-    color: theme.colors.textSecondary,
-  });
-
-  const _propertyInfoStyle = css({
-    flex: "1",
-    color: theme.colors.textMuted,
-    "font-size": "11px",
-  });
-
   const indexStyle = css({
     padding: `${theme.sizing.spacing.xs} ${theme.sizing.spacing.sm}`,
     background: theme.colors.bgSecondary,
@@ -339,7 +326,15 @@ export function CollectionsPanel(props: CollectionsPanelProps) {
   return (
     <div style={containerStyle}>
       <div style={listStyle}>
-        <div style={listHeaderStyle}>Collections</div>
+        <div style={listHeaderStyle}>
+          <span style={listTitleStyle}>Collections</span>
+          <input
+            style={searchInputStyle}
+            placeholder="Search collections..."
+            value={searchQuery()}
+            onInput={(e) => setSearchQuery(e.currentTarget.value)}
+          />
+        </div>
         <div style={listContentStyle}>
           <Show when={isLoading()}>
             <div style={{ padding: theme.sizing.spacing.md, color: theme.colors.textMuted }}>
@@ -356,7 +351,12 @@ export function CollectionsPanel(props: CollectionsPanelProps) {
               No collections found
             </div>
           </Show>
-          <For each={collections()}>
+          <Show when={!isLoading() && !error() && collections().length > 0 && filteredCollections().length === 0}>
+            <div style={{ padding: theme.sizing.spacing.md, color: theme.colors.textMuted, "text-align": "center" }}>
+              No matching collections
+            </div>
+          </Show>
+          <For each={filteredCollections()}>
             {(col) => {
               const isSelected = () => selectedCollection() === col.name;
               return (

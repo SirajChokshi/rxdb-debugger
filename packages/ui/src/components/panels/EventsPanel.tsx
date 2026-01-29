@@ -1,10 +1,13 @@
-import { createEffect, createSignal, For, onCleanup, Show, type JSX } from "solid-js";
-import type { RxdbDebugger, ChangeEvent } from "@rxdb-debugger/core";
+import { createEffect, createSignal, For, Show, type JSX } from "solid-js";
+import type { RxdbDebugger, ChangeEvent, OperationType } from "@rxdb-debugger/core";
 import { css, ellipsis, flex, scrollable } from "../../styles/css.js";
 import type { Theme } from "../../styles/theme.js";
 import { Button } from "../shared/Button.js";
 import { JsonDiff } from "../shared/JsonDiff.js";
 import { JsonViewer } from "../shared/JsonViewer.js";
+import { fromObservable } from "../../utils/observable.js";
+
+const OPERATION_TYPES: OperationType[] = ["INSERT", "UPDATE", "DELETE"];
 
 export interface EventsPanelProps {
   theme: Theme;
@@ -17,24 +20,42 @@ export function EventsPanel(props: EventsPanelProps) {
   const [selectedEvent, setSelectedEvent] = createSignal<ChangeEvent | null>(null);
   const [filter, setFilter] = createSignal<string>("");
   const [error, setError] = createSignal<string | null>(null);
+  const [collectionFilter, setCollectionFilter] = createSignal<string | null>(null);
+  const [operationFilters, setOperationFilters] = createSignal<Set<OperationType>>(new Set());
+  const [collectionNames, setCollectionNames] = createSignal<string[]>([]);
 
   createEffect(() => {
-    const sub = props.debugger.events
-      .stream()
-      .observe()
-      .subscribe({
-        next: (event) => {
-          if (!isPaused()) {
-            setEvents((prev) => [event, ...prev].slice(0, 200));
-          }
-          setError(null);
-        },
-        error: (err) => {
-          setError(err instanceof Error ? err.message : "Failed to stream events");
-        },
-      });
+    props.debugger.catalog.collectionNames().get()
+      .then(setCollectionNames)
+      .catch(() => setCollectionNames([]));
+  });
 
-    onCleanup(() => sub.unsubscribe());
+  const toggleOperationFilter = (op: OperationType) => {
+    setOperationFilters((prev) => {
+      const next = new Set(prev);
+      if (next.has(op)) {
+        next.delete(op);
+      } else {
+        next.add(op);
+      }
+      return next;
+    });
+  };
+
+  const latestEvent = fromObservable(
+    props.debugger.events.stream().observe(),
+    {
+      initialValue: null as ChangeEvent | null,
+      onError: (err) => setError(err instanceof Error ? err.message : "Failed to stream events"),
+    }
+  );
+
+  createEffect(() => {
+    const event = latestEvent();
+    if (event && !isPaused()) {
+      setEvents((prev) => [event, ...prev].slice(0, 200));
+      setError(null);
+    }
   });
 
   const togglePause = () => {
@@ -52,14 +73,22 @@ export function EventsPanel(props: EventsPanelProps) {
   };
 
   const filteredEvents = () => {
-    const f = filter().toLowerCase();
-    if (!f) return events();
-    return events().filter(
-      (e) =>
-        e.collection.toLowerCase().includes(f) ||
-        e.documentId.toLowerCase().includes(f) ||
-        e.operation.toLowerCase().includes(f)
-    );
+    const textFilter = filter().toLowerCase();
+    const collFilter = collectionFilter();
+    const opFilters = operationFilters();
+
+    return events().filter((e) => {
+      if (collFilter && e.collection !== collFilter) return false;
+      if (opFilters.size > 0 && !opFilters.has(e.operation)) return false;
+      if (textFilter) {
+        const matchesText =
+          e.collection.toLowerCase().includes(textFilter) ||
+          e.documentId.toLowerCase().includes(textFilter) ||
+          e.operation.toLowerCase().includes(textFilter);
+        if (!matchesText) return false;
+      }
+      return true;
+    });
   };
 
   const { theme } = props;
@@ -84,6 +113,7 @@ export function EventsPanel(props: EventsPanelProps) {
 
   const filterInputStyle = css({
     flex: "1",
+    "min-width": "120px",
     padding: `${theme.sizing.spacing.xs} ${theme.sizing.spacing.sm}`,
     background: theme.colors.bgSecondary,
     color: theme.colors.text,
@@ -91,6 +121,42 @@ export function EventsPanel(props: EventsPanelProps) {
     "border-radius": theme.sizing.borderRadius,
     "font-size": "12px",
     outline: "none",
+  });
+
+  const selectStyle = css({
+    padding: `${theme.sizing.spacing.xs} ${theme.sizing.spacing.sm}`,
+    background: theme.colors.bgSecondary,
+    color: theme.colors.text,
+    border: `1px solid ${theme.colors.border}`,
+    "border-radius": theme.sizing.borderRadius,
+    "font-size": "12px",
+    outline: "none",
+    cursor: "pointer",
+  });
+
+  const opToggleStyle = (isActive: boolean, op: OperationType): JSX.CSSProperties => {
+    const colors = {
+      INSERT: theme.colors.success,
+      UPDATE: theme.colors.warning,
+      DELETE: theme.colors.error,
+    };
+    const color = colors[op];
+    return css({
+      padding: `2px ${theme.sizing.spacing.xs}`,
+      "border-radius": "3px",
+      "font-size": "10px",
+      "font-weight": "600",
+      border: "none",
+      cursor: "pointer",
+      background: isActive ? `${color}30` : theme.colors.bgSecondary,
+      color: isActive ? color : theme.colors.textMuted,
+      opacity: isActive ? "1" : "0.6",
+    });
+  };
+
+  const filterGroupStyle = css(flex.row, {
+    gap: "4px",
+    "align-items": "center",
   });
 
   const eventListStyle = css(scrollable, {
@@ -180,6 +246,29 @@ export function EventsPanel(props: EventsPanelProps) {
             value={filter()}
             onInput={(e) => setFilter(e.currentTarget.value)}
           />
+          <select
+            style={selectStyle}
+            value={collectionFilter() ?? ""}
+            onChange={(e) => setCollectionFilter(e.currentTarget.value || null)}
+          >
+            <option value="">All Collections</option>
+            <For each={collectionNames()}>
+              {(name) => <option value={name}>{name}</option>}
+            </For>
+          </select>
+          <div style={filterGroupStyle}>
+            <For each={OPERATION_TYPES}>
+              {(op) => (
+                <button
+                  style={opToggleStyle(operationFilters().has(op), op)}
+                  onClick={() => toggleOperationFilter(op)}
+                  title={`Filter by ${op}`}
+                >
+                  {op}
+                </button>
+              )}
+            </For>
+          </div>
           <Button theme={theme} onClick={togglePause} variant={isPaused() ? "primary" : "secondary"}>
             {isPaused() ? "Resume" : "Pause"}
           </Button>

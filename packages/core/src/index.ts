@@ -45,12 +45,6 @@ export {
 } from "./export.js";
 
 export {
-  createMetadataService,
-  type DatabaseInfo,
-  type MetadataService,
-} from "./metadata.js";
-
-export {
   createPerformanceService,
   type OperationLog,
   type OperationTypeName,

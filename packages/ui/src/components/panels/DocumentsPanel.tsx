@@ -1,4 +1,4 @@
-import { createEffect, createSignal, For, onCleanup, Show, type JSX } from "solid-js";
+import { createEffect, createSignal, createMemo, For, onCleanup, Show, type JSX } from "solid-js";
 import type { RxdbDebugger, DiffResult, DocumentResult, SchemaDetails, DocumentVersion } from "@rxdb-debugger/core";
 import { Table, type TableColumn } from "../shared/Table.js";
 import { css, ellipsis, flex, scrollable } from "../../styles/css.js";
@@ -7,6 +7,7 @@ import { Button } from "../shared/Button.js";
 import { JsonDiff } from "../shared/JsonDiff.js";
 import { CodeEditor } from "../shared/CodeEditor.js";
 import { JsonViewer } from "../shared/JsonViewer.js";
+import { createObservableSignal } from "../../utils/observable.js";
 
 export interface DocumentsPanelProps {
   theme: Theme;
@@ -56,6 +57,27 @@ export function DocumentsPanel(props: DocumentsPanelProps) {
     });
   });
 
+  const liveDocuments = createMemo(() => {
+    const collection = selectedCollection();
+    if (!collection) return null;
+    return createObservableSignal(
+      () => props.debugger.documents.list(collection, { limit: PAGE_SIZE, live: true }).observe(),
+      {
+        initialValue: [] as DocumentResult[],
+        onError: (err) => setError(err instanceof Error ? err.message : "Failed to load documents"),
+      }
+    );
+  });
+
+  const liveCount = createMemo(() => {
+    const collection = selectedCollection();
+    if (!collection) return null;
+    return createObservableSignal(
+      () => props.debugger.documents.count(collection, { live: true }).observe(),
+      { initialValue: 0 }
+    );
+  });
+
   createEffect(() => {
     const collection = selectedCollection();
     if (!collection) return;
@@ -66,31 +88,24 @@ export function DocumentsPanel(props: DocumentsPanelProps) {
     setCompareDoc(null);
     setDiffResult(null);
     setError(null);
+  });
 
-    const countSub = props.debugger.documents
-      .count(collection, { live: true })
-      .observe()
-      .subscribe({ next: setTotalCount });
+  createEffect(() => {
+    const docsAccessor = liveDocuments();
+    if (docsAccessor) {
+      const docs = docsAccessor();
+      setDocuments(docs);
+      if (docs.length > 0 || !isLoading()) {
+        setIsLoading(false);
+      }
+    }
+  });
 
-    const docsSub = props.debugger.documents
-      .list(collection, { limit: PAGE_SIZE, live: true })
-      .observe()
-      .subscribe({
-        next: (docs) => {
-          setDocuments(docs);
-          setIsLoading(false);
-          setError(null);
-        },
-        error: (err) => {
-          setIsLoading(false);
-          setError(err instanceof Error ? err.message : "Failed to load documents");
-        },
-      });
-
-    onCleanup(() => {
-      countSub.unsubscribe();
-      docsSub.unsubscribe();
-    });
+  createEffect(() => {
+    const countAccessor = liveCount();
+    if (countAccessor) {
+      setTotalCount(countAccessor());
+    }
   });
 
   createEffect(() => {
