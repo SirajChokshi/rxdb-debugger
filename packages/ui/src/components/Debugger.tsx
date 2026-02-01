@@ -5,7 +5,6 @@ import type { Theme } from "../styles/theme.js";
 import { CollectionsPanel } from "./panels/CollectionsPanel.js";
 import { DocumentsPanel } from "./panels/DocumentsPanel.js";
 import { EventsPanel } from "./panels/EventsPanel.js";
-import { ExportPanel } from "./panels/ExportPanel.js";
 import { PerformancePanel } from "./panels/PerformancePanel.js";
 import { QueryPanel } from "./panels/QueryPanel.js";
 import { Tabs, type TabItem } from "./shared/Tabs.js";
@@ -15,8 +14,7 @@ export type PanelId =
   | "documents"
   | "query"
   | "events"
-  | "performance"
-  | "export";
+  | "performance";
 
 export interface DebuggerProps {
   debugger: RxdbDebugger;
@@ -33,7 +31,6 @@ const TABS: TabItem[] = [
   { id: "query", label: "Query" },
   { id: "events", label: "Events" },
   { id: "performance", label: "Performance" },
-  { id: "export", label: "Export" },
 ];
 
 export function Debugger(props: DebuggerProps): JSX.Element {
@@ -91,13 +88,6 @@ export function Debugger(props: DebuggerProps): JSX.Element {
           </Match>
           <Match when={activeTab() === "performance"}>
             <PerformancePanel theme={theme} debugger={props.debugger} />
-          </Match>
-          <Match when={activeTab() === "export"}>
-            <ExportPanel
-              theme={theme}
-              debugger={props.debugger}
-              allowMutations={allowMutations}
-            />
           </Match>
         </Switch>
       </div>
