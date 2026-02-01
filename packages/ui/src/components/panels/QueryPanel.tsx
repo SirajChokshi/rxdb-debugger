@@ -29,6 +29,7 @@ export function QueryPanel(props: QueryPanelProps) {
   const [hasRun, setHasRun] = createSignal(false);
   const [explanation, setExplanation] = createSignal<QueryExplanation | null>(null);
   const [isExplaining, setIsExplaining] = createSignal(false);
+  const [isExporting, setIsExporting] = createSignal(false);
   const [queryMode, setQueryMode] = createSignal<"json" | "builder">("json");
   const [clauses, setClauses] = createSignal<{ id: number; field: string; operator: string; value: string }[]>([]);
   const [sortField, setSortField] = createSignal("");
@@ -86,6 +87,35 @@ export function QueryPanel(props: QueryPanelProps) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setIsExplaining(false);
+    }
+  };
+
+  const exportResults = async () => {
+    const collection = selectedCollection();
+    if (!collection) return;
+
+    setIsExporting(true);
+    setError(null);
+
+    try {
+      const query = JSON.parse(queryText());
+      const boundlessQuery = { ...query };
+      delete boundlessQuery.limit;
+
+      const json = await props.debugger.export.exportQuery(collection, boundlessQuery, { pretty: true });
+      const blob = new Blob([json], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${collection}-query-${Date.now()}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -247,6 +277,9 @@ export function QueryPanel(props: QueryPanelProps) {
         </Button>
         <Button theme={theme} variant="secondary" onClick={explainQuery} disabled={isExplaining()}>
           {isExplaining() ? "Analyzing..." : "Explain"}
+        </Button>
+        <Button theme={theme} variant="secondary" onClick={exportResults} disabled={isExporting()}>
+          {isExporting() ? "Exporting..." : "Export"}
         </Button>
         <Button theme={theme} onClick={() => { setShowHistory(!showHistory()); refreshHistory(); }}>
           History
