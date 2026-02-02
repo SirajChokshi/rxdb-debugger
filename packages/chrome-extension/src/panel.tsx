@@ -154,11 +154,32 @@ function Panel() {
   }
 
   onMount(() => {
+    let lastTheme = getDevToolsTheme();
+    
     connect();
 
     // Listen for page navigation/reload
     chrome.devtools.network.onNavigated.addListener(() => {
       connect();
+    });
+
+    // Check for theme changes when panel becomes visible
+    // (DevTools was closed and reopened with different theme)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        const currentTheme = getDevToolsTheme();
+        if (currentTheme !== lastTheme) {
+          lastTheme = currentTheme;
+          // Theme changed, reconnect to apply new theme
+          connect();
+        }
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    
+    onCleanup(() => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     });
   });
 
