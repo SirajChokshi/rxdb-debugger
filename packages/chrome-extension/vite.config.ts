@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import solid from "vite-plugin-solid";
+import tailwindcss from "@tailwindcss/vite";
 import { viteStaticCopy } from "vite-plugin-static-copy";
 import { resolve } from "path";
 import { fileURLToPath } from "url";
@@ -8,6 +9,7 @@ const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
 export default defineConfig({
   plugins: [
+    tailwindcss(),
     solid(),
     viteStaticCopy({
       targets: [

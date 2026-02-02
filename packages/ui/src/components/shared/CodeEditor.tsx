@@ -1,5 +1,4 @@
-import { createSignal, type JSX } from "solid-js";
-import { css } from "../../styles/css.js";
+import { createSignal, Show } from "solid-js";
 import type { Theme } from "../../styles/theme.js";
 
 export interface CodeEditorProps {
@@ -35,51 +34,28 @@ export function CodeEditor(props: CodeEditorProps) {
     props.onChange?.(value);
   };
 
-  const containerStyle = (): JSX.CSSProperties =>
-    css({
-      display: "flex",
-      "flex-direction": "column",
-      height: props.height ?? "200px",
-      border: `1px solid ${error() ? props.theme.colors.error : props.theme.colors.border}`,
-      "border-radius": props.theme.sizing.borderRadius,
-      overflow: "hidden",
-    });
-
-  const textareaStyle = (): JSX.CSSProperties =>
-    css({
-      flex: "1",
-      padding: props.theme.sizing.spacing.md,
-      background: props.theme.colors.bg,
-      color: props.theme.colors.text,
-      border: "none",
-      resize: "none",
-      "font-family": props.theme.fonts.mono,
-      "font-size": "12px",
-      "line-height": "1.5",
-      outline: "none",
-      "tab-size": "2",
-    });
-
-  const errorStyle = (): JSX.CSSProperties =>
-    css({
-      padding: `${props.theme.sizing.spacing.xs} ${props.theme.sizing.spacing.sm}`,
-      background: props.theme.colors.error,
-      color: "#fff",
-      "font-size": "11px",
-      "font-family": props.theme.fonts.mono,
-    });
+  const containerClasses = () => {
+    const base = "flex flex-col rounded-[var(--radius)] overflow-hidden border";
+    const borderColor = error() ? "border-error" : "border-border";
+    return `${base} ${borderColor}`;
+  };
 
   return (
-    <div style={containerStyle()}>
+    <div class={containerClasses()} style={{ height: props.height ?? "200px" }}>
       <textarea
-        style={textareaStyle()}
+        class="flex-1 p-[var(--spacing-md)] bg-bg text-text border-none resize-none font-mono text-xs leading-normal outline-none"
+        style={{ "tab-size": "2" }}
         value={props.value}
         onInput={handleChange}
         placeholder={props.placeholder}
         readOnly={props.readonly}
         spellcheck={false}
       />
-      {error() && <div style={errorStyle()}>{error()}</div>}
+      <Show when={error()}>
+        <div class="px-[var(--spacing-sm)] py-[var(--spacing-xs)] bg-error text-white text-[11px] font-mono">
+          {error()}
+        </div>
+      </Show>
     </div>
   );
 }

@@ -1,7 +1,8 @@
 @import "tailwindcss";
 
-/* Scan UI package source files for Tailwind classes used by the debugger */
-@source "../../../packages/ui/src/**/*.tsx";
+/* Scan all component source files to generate the CSS utilities they use */
+@source "../components/**/*.tsx";
+@source "../mount.ts";
 
 @theme {
   /* Fonts - shared across themes */
@@ -54,14 +55,14 @@
   --color-error: #cf222e;
 }
 
-/* Base styles for standalone debugger use */
+/* Base styles for standalone use */
 .rxdb-debugger {
   background-color: var(--color-bg);
   color: var(--color-text);
   font-family: var(--font-sans);
 }
 
-/* Scrollbar styling for debugger */
+/* Scrollbar styling */
 .rxdb-debugger ::-webkit-scrollbar {
   width: 8px;
   height: 8px;

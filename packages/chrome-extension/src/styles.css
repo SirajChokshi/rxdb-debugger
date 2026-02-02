@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
-/* Scan UI package source files for Tailwind classes used by the debugger */
-@source "../../../packages/ui/src/**/*.tsx";
+/* Tell Tailwind to scan the UI package source for class names */
+@source "../../ui/src/**/*.tsx";
 
 @theme {
   /* Fonts - shared across themes */
@@ -37,8 +37,7 @@
 }
 
 /* Light theme overrides */
-.theme-light,
-.theme-light .rxdb-debugger {
+.theme-light {
   --color-bg: #ffffff;
   --color-bg-secondary: #f6f8fa;
   --color-bg-hover: #eaeef2;
@@ -54,28 +53,34 @@
   --color-error: #cf222e;
 }
 
-/* Base styles for standalone debugger use */
-.rxdb-debugger {
+/* Base styles */
+body {
   background-color: var(--color-bg);
   color: var(--color-text);
   font-family: var(--font-sans);
+  margin: 0;
+  padding: 0;
 }
 
-/* Scrollbar styling for debugger */
-.rxdb-debugger ::-webkit-scrollbar {
+* {
+  box-sizing: border-box;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
-.rxdb-debugger ::-webkit-scrollbar-track {
+::-webkit-scrollbar-track {
   background: var(--color-bg-secondary);
 }
 
-.rxdb-debugger ::-webkit-scrollbar-thumb {
+::-webkit-scrollbar-thumb {
   background: var(--color-border);
   border-radius: 4px;
 }
 
-.rxdb-debugger ::-webkit-scrollbar-thumb:hover {
+::-webkit-scrollbar-thumb:hover {
   background: var(--color-text-muted);
 }

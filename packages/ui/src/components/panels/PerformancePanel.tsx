@@ -1,6 +1,5 @@
-import { createEffect, createSignal, For, onCleanup, Show, type JSX } from "solid-js";
+import { createEffect, createSignal, For, onCleanup, Show } from "solid-js";
 import type { RxdbDebugger, OperationLog, PerformanceMetrics } from "@rxdb-debugger/core";
-import { css, flex, scrollable } from "../../styles/css.js";
 import type { Theme } from "../../styles/theme.js";
 import { Button } from "../shared/Button.js";
 
@@ -14,6 +13,8 @@ export function PerformancePanel(props: PerformancePanelProps) {
   const [slowOps, setSlowOps] = createSignal<OperationLog[]>([]);
   const [isTracking, setIsTracking] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
+
+  const { theme } = props;
 
   const refreshMetrics = async () => {
     try {
@@ -50,207 +51,73 @@ export function PerformancePanel(props: PerformancePanelProps) {
     refreshMetrics();
   };
 
-  const { theme } = props;
-
-  const containerStyle = css(flex.col, {
-    height: "100%",
-    overflow: "hidden",
-  });
-
-  const toolbarStyle = css(flex.row, {
-    padding: theme.sizing.spacing.md,
-    gap: theme.sizing.spacing.sm,
-    "border-bottom": `1px solid ${theme.colors.border}`,
-    "align-items": "center",
-    "flex-shrink": "0",
-  });
-
-  const contentStyle = css(flex.row, scrollable, {
-    flex: "1",
-    overflow: "hidden",
-  });
-
-  const metricsStyle = css(flex.col, {
-    width: "300px",
-    "flex-shrink": "0",
-    padding: theme.sizing.spacing.md,
-    "border-right": `1px solid ${theme.colors.border}`,
-    overflow: "auto",
-  });
-
-  const metricCardStyle = css({
-    padding: theme.sizing.spacing.md,
-    background: theme.colors.bgSecondary,
-    "border-radius": theme.sizing.borderRadius,
-    "margin-bottom": theme.sizing.spacing.md,
-  });
-
-  const metricLabelStyle = css({
-    "font-size": "11px",
-    color: theme.colors.textMuted,
-    "text-transform": "uppercase",
-    "margin-bottom": theme.sizing.spacing.xs,
-  });
-
-  const metricValueStyle = css({
-    "font-size": "24px",
-    "font-weight": "600",
-    color: theme.colors.text,
-    "font-family": theme.fonts.mono,
-  });
-
-  const slowOpsStyle = css(flex.col, scrollable, {
-    flex: "1",
-    padding: theme.sizing.spacing.md,
-  });
-
-  const sectionTitleStyle = css({
-    "font-weight": "600",
-    "font-size": "12px",
-    "margin-bottom": theme.sizing.spacing.md,
-    color: theme.colors.text,
-  });
-
-  const opRowStyle = css(flex.row, {
-    padding: theme.sizing.spacing.sm,
-    "border-bottom": `1px solid ${theme.colors.border}`,
-    "font-size": "12px",
-    gap: theme.sizing.spacing.sm,
-    "align-items": "center",
-  });
-
-  const opTypeBadgeStyle = css({
-    padding: `2px ${theme.sizing.spacing.xs}`,
-    "border-radius": "3px",
-    "font-size": "10px",
-    "font-weight": "500",
-    background: theme.colors.bgSecondary,
-    color: theme.colors.textSecondary,
-    "min-width": "50px",
-    "text-align": "center",
-  });
-
-  const opCollectionStyle = css({
-    flex: "1",
-    color: theme.colors.accent,
-    "font-family": theme.fonts.mono,
-  });
-
-  const opDurationStyle = (duration: number): JSX.CSSProperties =>
-    css({
-      "font-family": theme.fonts.mono,
-      color: duration > 100 ? theme.colors.error : duration > 50 ? theme.colors.warning : theme.colors.success,
-    });
-
-  const barContainerStyle = css({
-    display: "flex",
-    "flex-direction": "column",
-    gap: theme.sizing.spacing.xs,
-    "margin-top": theme.sizing.spacing.sm,
-  });
-
-  const barRowStyle = css(flex.row, {
-    "align-items": "center",
-    gap: theme.sizing.spacing.sm,
-    "font-size": "11px",
-  });
-
-  const barLabelStyle = css({
-    width: "80px",
-    "flex-shrink": "0",
-    color: theme.colors.textSecondary,
-  });
-
-  const barTrackStyle = css({
-    flex: "1",
-    height: "8px",
-    background: theme.colors.bgSecondary,
-    "border-radius": "4px",
-    overflow: "hidden",
-  });
-
-  const barFillStyle = (percent: number): JSX.CSSProperties =>
-    css({
-      width: `${Math.min(100, percent)}%`,
-      height: "100%",
-      background: theme.colors.accent,
-      "border-radius": "4px",
-    });
-
-  const barValueStyle = css({
-    width: "40px",
-    "text-align": "right",
-    "font-family": theme.fonts.mono,
-    color: theme.colors.textMuted,
-  });
-
   const formatDuration = (ms: number): string => {
     if (ms >= 1000) return `${(ms / 1000).toFixed(2)}s`;
     return `${ms.toFixed(1)}ms`;
   };
 
+  const durationColor = (duration: number) => {
+    if (duration > 100) return "text-error";
+    if (duration > 50) return "text-warning";
+    return "text-success";
+  };
+
   return (
-    <div style={containerStyle}>
-      <div style={toolbarStyle}>
+    <div class="flex flex-col h-full overflow-hidden">
+      <div class="flex flex-row p-[var(--spacing-md)] gap-[var(--spacing-sm)] border-b border-border items-center shrink-0">
         <Button theme={theme} variant={isTracking() ? "danger" : "primary"} onClick={toggleTracking}>
           {isTracking() ? "Stop Tracking" : "Start Tracking"}
         </Button>
-        <Button theme={theme} onClick={clearMetrics}>
-          Clear
-        </Button>
-        <Button theme={theme} onClick={refreshMetrics}>
-          Refresh
-        </Button>
-        <div style={{ flex: "1" }} />
-        <span style={{ "font-size": "11px", color: isTracking() ? theme.colors.success : theme.colors.textMuted }}>
+        <Button theme={theme} onClick={clearMetrics}>Clear</Button>
+        <Button theme={theme} onClick={refreshMetrics}>Refresh</Button>
+        <div class="flex-1" />
+        <span class={`text-[11px] ${isTracking() ? "text-success" : "text-text-muted"}`}>
           {isTracking() ? "● Tracking" : "○ Not tracking"}
         </span>
       </div>
 
-      <div style={contentStyle}>
-        <div style={metricsStyle}>
+      <div class="flex flex-row flex-1 overflow-hidden">
+        <div class="flex flex-col w-[300px] shrink-0 p-[var(--spacing-md)] border-r border-border overflow-auto">
           <Show when={error()}>
-            <div style={{ color: theme.colors.error, background: `${theme.colors.error}15`, padding: theme.sizing.spacing.md, "border-radius": theme.sizing.borderRadius, "margin-bottom": theme.sizing.spacing.md }}>
+            <div class="text-error bg-error/10 p-[var(--spacing-md)] rounded-[var(--radius)] mb-[var(--spacing-md)]">
               {error()}
             </div>
           </Show>
           <Show when={metrics()} fallback={
-            <div style={{ color: theme.colors.textMuted }}>
-              Start tracking to see performance metrics
-            </div>
+            <div class="text-text-muted">Start tracking to see performance metrics</div>
           }>
             {(m) => (
               <>
-                <div style={metricCardStyle}>
-                  <div style={metricLabelStyle}>Total Operations</div>
-                  <div style={metricValueStyle}>{m().totalOperations}</div>
+                <div class="p-[var(--spacing-md)] bg-bg-secondary rounded-[var(--radius)] mb-[var(--spacing-md)]">
+                  <div class="text-[11px] text-text-muted uppercase mb-[var(--spacing-xs)]">Total Operations</div>
+                  <div class="text-2xl font-semibold text-text font-mono">{m().totalOperations}</div>
                 </div>
 
-                <div style={metricCardStyle}>
-                  <div style={metricLabelStyle}>Average Duration</div>
-                  <div style={metricValueStyle}>{formatDuration(m().averageDuration)}</div>
+                <div class="p-[var(--spacing-md)] bg-bg-secondary rounded-[var(--radius)] mb-[var(--spacing-md)]">
+                  <div class="text-[11px] text-text-muted uppercase mb-[var(--spacing-xs)]">Average Duration</div>
+                  <div class="text-2xl font-semibold text-text font-mono">{formatDuration(m().averageDuration)}</div>
                 </div>
 
-                <div style={metricCardStyle}>
-                  <div style={metricLabelStyle}>Failed Operations</div>
-                  <div style={css(metricValueStyle, { color: m().failedOperations > 0 ? theme.colors.error : theme.colors.success })}>
+                <div class="p-[var(--spacing-md)] bg-bg-secondary rounded-[var(--radius)] mb-[var(--spacing-md)]">
+                  <div class="text-[11px] text-text-muted uppercase mb-[var(--spacing-xs)]">Failed Operations</div>
+                  <div class={`text-2xl font-semibold font-mono ${m().failedOperations > 0 ? "text-error" : "text-success"}`}>
                     {m().failedOperations}
                   </div>
                 </div>
 
-                <div style={metricCardStyle}>
-                  <div style={metricLabelStyle}>By Type</div>
-                  <div style={barContainerStyle}>
+                <div class="p-[var(--spacing-md)] bg-bg-secondary rounded-[var(--radius)] mb-[var(--spacing-md)]">
+                  <div class="text-[11px] text-text-muted uppercase mb-[var(--spacing-xs)]">By Type</div>
+                  <div class="flex flex-col gap-[var(--spacing-xs)] mt-[var(--spacing-sm)]">
                     <For each={Object.entries(m().operationsByType).sort((a, b) => b[1] - a[1])}>
                       {([type, count]) => {
                         const percent = (count / m().totalOperations) * 100;
                         return (
-                          <div style={barRowStyle}>
-                            <span style={barLabelStyle}>{type}</span>
-                            <div style={barTrackStyle}>
-                              <div style={barFillStyle(percent)} />
+                          <div class="flex flex-row items-center gap-[var(--spacing-sm)] text-[11px]">
+                            <span class="w-20 shrink-0 text-text-secondary">{type}</span>
+                            <div class="flex-1 h-2 bg-bg-secondary rounded overflow-hidden">
+                              <div class="h-full bg-accent rounded" style={{ width: `${Math.min(100, percent)}%` }} />
                             </div>
-                            <span style={barValueStyle}>{count}</span>
+                            <span class="w-10 text-right font-mono text-text-muted">{count}</span>
                           </div>
                         );
                       }}
@@ -258,19 +125,19 @@ export function PerformancePanel(props: PerformancePanelProps) {
                   </div>
                 </div>
 
-                <div style={metricCardStyle}>
-                  <div style={metricLabelStyle}>By Collection</div>
-                  <div style={barContainerStyle}>
+                <div class="p-[var(--spacing-md)] bg-bg-secondary rounded-[var(--radius)] mb-[var(--spacing-md)]">
+                  <div class="text-[11px] text-text-muted uppercase mb-[var(--spacing-xs)]">By Collection</div>
+                  <div class="flex flex-col gap-[var(--spacing-xs)] mt-[var(--spacing-sm)]">
                     <For each={Object.entries(m().operationsByCollection).sort((a, b) => b[1] - a[1]).slice(0, 5)}>
                       {([col, count]) => {
                         const percent = (count / m().totalOperations) * 100;
                         return (
-                          <div style={barRowStyle}>
-                            <span style={barLabelStyle}>{col}</span>
-                            <div style={barTrackStyle}>
-                              <div style={barFillStyle(percent)} />
+                          <div class="flex flex-row items-center gap-[var(--spacing-sm)] text-[11px]">
+                            <span class="w-20 shrink-0 text-text-secondary truncate">{col}</span>
+                            <div class="flex-1 h-2 bg-bg-secondary rounded overflow-hidden">
+                              <div class="h-full bg-accent rounded" style={{ width: `${Math.min(100, percent)}%` }} />
                             </div>
-                            <span style={barValueStyle}>{count}</span>
+                            <span class="w-10 text-right font-mono text-text-muted">{count}</span>
                           </div>
                         );
                       }}
@@ -282,11 +149,11 @@ export function PerformancePanel(props: PerformancePanelProps) {
           </Show>
         </div>
 
-        <div style={slowOpsStyle}>
+        <div class="flex flex-col flex-1 overflow-auto p-[var(--spacing-md)]">
           <Show when={slowOps().length > 0}>
-            <div style={{ "margin-bottom": theme.sizing.spacing.lg }}>
-              <div style={sectionTitleStyle}>Operation Timeline</div>
-              <div style={{ background: theme.colors.bgSecondary, "border-radius": theme.sizing.borderRadius, padding: theme.sizing.spacing.sm }}>
+            <div class="block mb-[var(--spacing-lg)]">
+              <div class="font-semibold text-xs mb-[var(--spacing-md)] text-text">Operation Timeline</div>
+              <div class="bg-bg-secondary rounded-[var(--radius)] p-[var(--spacing-sm)]">
                 <svg width="100%" height="80" style={{ display: "block" }}>
                   {(() => {
                     const ops = slowOps();
@@ -319,26 +186,26 @@ export function PerformancePanel(props: PerformancePanelProps) {
                     );
                   })()}
                 </svg>
-                <div style={css(flex.row, flex.between, { "font-size": "10px", color: theme.colors.textMuted, "margin-top": theme.sizing.spacing.xs })}>
+                <div class="flex flex-row justify-between text-[10px] text-text-muted mt-[var(--spacing-xs)]">
                   <span>Oldest</span>
                   <span>Most Recent</span>
                 </div>
               </div>
             </div>
           </Show>
-          <div style={sectionTitleStyle}>Slow Operations (&gt;50ms)</div>
+          <div class="font-semibold text-xs mb-[var(--spacing-md)] text-text">Slow Operations (&gt;50ms)</div>
           <For each={slowOps()} fallback={
-            <div style={{ color: theme.colors.textMuted, "font-size": "12px" }}>
-              No slow operations recorded
-            </div>
+            <div class="text-text-muted text-xs">No slow operations recorded</div>
           }>
             {(op) => (
-              <div style={opRowStyle}>
-                <span style={opTypeBadgeStyle}>{op.type}</span>
-                <span style={opCollectionStyle}>{op.collection}</span>
-                <span style={opDurationStyle(op.duration)}>{formatDuration(op.duration)}</span>
+              <div class="flex flex-row p-[var(--spacing-sm)] border-b border-border text-xs gap-[var(--spacing-sm)] items-center">
+                <span class="px-[var(--spacing-xs)] py-0.5 rounded-sm text-[10px] font-medium bg-bg-secondary text-text-secondary min-w-[50px] text-center">
+                  {op.type}
+                </span>
+                <span class="flex-1 text-accent font-mono">{op.collection}</span>
+                <span class={`font-mono ${durationColor(op.duration)}`}>{formatDuration(op.duration)}</span>
                 <Show when={op.resultCount !== undefined}>
-                  <span style={{ color: theme.colors.textMuted }}>{op.resultCount} results</span>
+                  <span class="text-text-muted">{op.resultCount} results</span>
                 </Show>
               </div>
             )}

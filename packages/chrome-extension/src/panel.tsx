@@ -3,6 +3,7 @@ import { render } from "solid-js/web";
 import { mountDebugger } from "@rxdb-debugger/ui";
 import { createRemoteDatabase, waitForDatabase } from "./remote-db";
 import { initBridge, disposeBridge } from "./bridge";
+import "./styles.css";
 
 type State =
   | { status: "loading" }

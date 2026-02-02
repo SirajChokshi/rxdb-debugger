@@ -1,6 +1,5 @@
 import { createEffect, createSignal, For, Show } from "solid-js";
 import type { RxdbDebugger, QueryDocument, QueryHistoryEntry, QueryExplanation } from "@rxdb-debugger/core";
-import { css, flex, scrollable } from "../../styles/css.js";
 import type { Theme } from "../../styles/theme.js";
 import { Button } from "../shared/Button.js";
 import { CodeEditor } from "../shared/CodeEditor.js";
@@ -36,6 +35,8 @@ export function QueryPanel(props: QueryPanelProps) {
   const [sortDirection, setSortDirection] = createSignal<"asc" | "desc">("asc");
   const [limit, setLimit] = createSignal(25);
   let clauseIdCounter = 0;
+
+  const { theme } = props;
 
   createEffect(() => {
     props.debugger.catalog.collectionNames().get().then((names) => {
@@ -181,90 +182,24 @@ export function QueryPanel(props: QueryPanelProps) {
     setShowHistory(false);
   };
 
-  const { theme } = props;
+  const efficiencyClasses = (eff: string) => {
+    if (eff === "index-only") return "bg-success/30 text-success";
+    if (eff === "partial-index") return "bg-warning/30 text-warning";
+    return "bg-error/30 text-error";
+  };
 
-  const containerStyle = css(flex.col, {
-    height: "100%",
-    overflow: "hidden",
-  });
+  const modeButtonClasses = (isActive: boolean) => {
+    const base = "px-[var(--spacing-sm)] py-[var(--spacing-xs)] border-none rounded-[var(--radius)] cursor-pointer text-[11px]";
+    return isActive ? `${base} bg-accent text-white` : `${base} bg-transparent text-text-muted`;
+  };
 
-  const toolbarStyle = css(flex.row, {
-    padding: theme.sizing.spacing.md,
-    gap: theme.sizing.spacing.sm,
-    "border-bottom": `1px solid ${theme.colors.border}`,
-    "align-items": "center",
-    "flex-shrink": "0",
-  });
-
-  const selectStyle = css({
-    padding: `${theme.sizing.spacing.xs} ${theme.sizing.spacing.sm}`,
-    background: theme.colors.bgSecondary,
-    color: theme.colors.text,
-    border: `1px solid ${theme.colors.border}`,
-    "border-radius": theme.sizing.borderRadius,
-    "font-size": "12px",
-  });
-
-  const editorContainerStyle = css({
-    padding: theme.sizing.spacing.md,
-    "padding-top": "0",
-    "flex-shrink": "0",
-  });
-
-  const resultsContainerStyle = css(flex.col, scrollable, {
-    flex: "1",
-    "border-top": `1px solid ${theme.colors.border}`,
-  });
-
-  const resultsHeaderStyle = css(flex.row, flex.between, {
-    padding: theme.sizing.spacing.md,
-    background: theme.colors.bgSecondary,
-    "font-size": "12px",
-    "flex-shrink": "0",
-  });
-
-  const resultRowStyle = css({
-    padding: theme.sizing.spacing.md,
-    "border-bottom": `1px solid ${theme.colors.border}`,
-    "font-family": theme.fonts.mono,
-    "font-size": "11px",
-    "white-space": "pre-wrap",
-    "word-break": "break-all",
-  });
-
-  const errorStyle = css({
-    padding: theme.sizing.spacing.md,
-    background: `${theme.colors.error}20`,
-    color: theme.colors.error,
-    "font-size": "12px",
-  });
-
-  const historyPanelStyle = css(flex.col, {
-    position: "absolute",
-    right: theme.sizing.spacing.md,
-    top: "50px",
-    width: "300px",
-    "max-height": "300px",
-    background: theme.colors.bg,
-    border: `1px solid ${theme.colors.border}`,
-    "border-radius": theme.sizing.borderRadius,
-    "box-shadow": "0 4px 12px rgba(0,0,0,0.3)",
-    "z-index": "10",
-    overflow: "hidden",
-  });
-
-  const historyItemStyle = css({
-    padding: theme.sizing.spacing.sm,
-    "border-bottom": `1px solid ${theme.colors.border}`,
-    cursor: "pointer",
-    "font-size": "11px",
-  });
+  const inputClasses = "flex-1 p-[var(--spacing-xs)] bg-bg-secondary border border-border rounded-[var(--radius)] text-text text-xs";
 
   return (
-    <div style={css(containerStyle, { position: "relative" })}>
-      <div style={toolbarStyle}>
+    <div class="flex flex-col h-full overflow-hidden relative">
+      <div class="flex flex-row p-[var(--spacing-md)] gap-[var(--spacing-sm)] border-b border-border items-center shrink-0">
         <select
-          style={selectStyle}
+          class="px-[var(--spacing-sm)] py-[var(--spacing-xs)] bg-bg-secondary text-text border border-border rounded-[var(--radius)] text-xs"
           value={selectedCollection()}
           onChange={(e) => setSelectedCollection(e.currentTarget.value)}
         >
@@ -284,61 +219,33 @@ export function QueryPanel(props: QueryPanelProps) {
         <Button theme={theme} onClick={() => { setShowHistory(!showHistory()); refreshHistory(); }}>
           History
         </Button>
-        <div style={css(flex.row, { gap: "2px", background: theme.colors.bgSecondary, "border-radius": theme.sizing.borderRadius, padding: "2px" })}>
-          <button
-            style={css({
-              padding: `${theme.sizing.spacing.xs} ${theme.sizing.spacing.sm}`,
-              border: "none",
-              "border-radius": theme.sizing.borderRadius,
-              cursor: "pointer",
-              "font-size": "11px",
-              background: queryMode() === "json" ? theme.colors.accent : "transparent",
-              color: queryMode() === "json" ? "#fff" : theme.colors.textMuted,
-            })}
-            onClick={() => setQueryMode("json")}
-          >
+        <div class="flex flex-row gap-0.5 bg-bg-secondary rounded-[var(--radius)] p-0.5">
+          <button class={modeButtonClasses(queryMode() === "json")} onClick={() => setQueryMode("json")}>
             JSON
           </button>
-          <button
-            style={css({
-              padding: `${theme.sizing.spacing.xs} ${theme.sizing.spacing.sm}`,
-              border: "none",
-              "border-radius": theme.sizing.borderRadius,
-              cursor: "pointer",
-              "font-size": "11px",
-              background: queryMode() === "builder" ? theme.colors.accent : "transparent",
-              color: queryMode() === "builder" ? "#fff" : theme.colors.textMuted,
-            })}
-            onClick={() => setQueryMode("builder")}
-          >
+          <button class={modeButtonClasses(queryMode() === "builder")} onClick={() => setQueryMode("builder")}>
             Builder
           </button>
         </div>
-        <div style={{ flex: "1" }} />
+        <div class="flex-1" />
         <Show when={duration() !== null}>
-          <span style={{ "font-size": "11px", color: theme.colors.textMuted }}>
-            {duration()?.toFixed(1)}ms
-          </span>
+          <span class="text-[11px] text-text-muted">{duration()?.toFixed(1)}ms</span>
         </Show>
       </div>
 
       <Show when={showHistory()}>
-        <div style={historyPanelStyle}>
-          <div style={css(scrollable, { flex: "1" })}>
+        <div class="absolute right-[var(--spacing-md)] top-[50px] w-[300px] max-h-[300px] bg-bg border border-border rounded-[var(--radius)] shadow-lg z-10 overflow-hidden flex flex-col">
+          <div class="flex-1 overflow-auto">
             <For each={history()} fallback={
-              <div style={{ padding: theme.sizing.spacing.md, color: theme.colors.textMuted }}>
-                No history yet
-              </div>
+              <div class="p-[var(--spacing-md)] text-text-muted">No history yet</div>
             }>
               {(entry) => (
                 <div
-                  style={historyItemStyle}
+                  class="p-[var(--spacing-sm)] border-b border-border cursor-pointer text-[11px] hover:bg-bg-hover"
                   onClick={() => loadFromHistory(entry)}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = theme.colors.bgHover; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
                 >
-                  <div style={{ "font-weight": "500" }}>{entry.collection}</div>
-                  <div style={{ color: theme.colors.textMuted }}>
+                  <div class="font-medium">{entry.collection}</div>
+                  <div class="text-text-muted">
                     {entry.resultCount} results • {entry.duration.toFixed(1)}ms
                     {!entry.success && ` • ${entry.error}`}
                   </div>
@@ -350,7 +257,7 @@ export function QueryPanel(props: QueryPanelProps) {
       </Show>
 
       <Show when={queryMode() === "json"}>
-        <div style={editorContainerStyle}>
+        <div class="p-[var(--spacing-md)] pt-0 shrink-0">
           <CodeEditor
             theme={theme}
             value={queryText()}
@@ -363,37 +270,22 @@ export function QueryPanel(props: QueryPanelProps) {
       </Show>
 
       <Show when={queryMode() === "builder"}>
-        <div style={css(flex.col, { padding: theme.sizing.spacing.md, gap: theme.sizing.spacing.sm, "border-bottom": `1px solid ${theme.colors.border}` })}>
-          <div style={css(flex.row, { gap: theme.sizing.spacing.sm, "align-items": "center" })}>
-            <span style={{ "font-size": "12px", "font-weight": "500" }}>Filters</span>
+        <div class="flex flex-col p-[var(--spacing-md)] gap-[var(--spacing-sm)] border-b border-border">
+          <div class="flex flex-row gap-[var(--spacing-sm)] items-center">
+            <span class="text-xs font-medium">Filters</span>
             <Button theme={theme} size="sm" onClick={addClause}>+ Add Filter</Button>
           </div>
           <For each={clauses()}>
             {(clause) => (
-              <div style={css(flex.row, { gap: theme.sizing.spacing.sm, "align-items": "center" })}>
+              <div class="flex flex-row gap-[var(--spacing-sm)] items-center">
                 <input
-                  style={css({
-                    flex: "1",
-                    padding: theme.sizing.spacing.xs,
-                    background: theme.colors.bgSecondary,
-                    border: `1px solid ${theme.colors.border}`,
-                    "border-radius": theme.sizing.borderRadius,
-                    color: theme.colors.text,
-                    "font-size": "12px",
-                  })}
+                  class={inputClasses}
                   placeholder="field"
                   value={clause.field}
                   onInput={(e) => updateClause(clause.id, "field", e.currentTarget.value)}
                 />
                 <select
-                  style={css({
-                    padding: theme.sizing.spacing.xs,
-                    background: theme.colors.bgSecondary,
-                    border: `1px solid ${theme.colors.border}`,
-                    "border-radius": theme.sizing.borderRadius,
-                    color: theme.colors.text,
-                    "font-size": "12px",
-                  })}
+                  class="p-[var(--spacing-xs)] bg-bg-secondary border border-border rounded-[var(--radius)] text-text text-xs"
                   value={clause.operator}
                   onChange={(e) => updateClause(clause.id, "operator", e.currentTarget.value)}
                 >
@@ -407,15 +299,7 @@ export function QueryPanel(props: QueryPanelProps) {
                   <option value="$in">in</option>
                 </select>
                 <input
-                  style={css({
-                    flex: "1",
-                    padding: theme.sizing.spacing.xs,
-                    background: theme.colors.bgSecondary,
-                    border: `1px solid ${theme.colors.border}`,
-                    "border-radius": theme.sizing.borderRadius,
-                    color: theme.colors.text,
-                    "font-size": "12px",
-                  })}
+                  class={inputClasses}
                   placeholder="value"
                   value={clause.value}
                   onInput={(e) => updateClause(clause.id, "value", e.currentTarget.value)}
@@ -425,34 +309,19 @@ export function QueryPanel(props: QueryPanelProps) {
             )}
           </For>
           <Show when={clauses().length === 0}>
-            <div style={{ "font-size": "12px", color: theme.colors.textMuted }}>No filters. Click "+ Add Filter" to add one.</div>
+            <div class="text-xs text-text-muted">No filters. Click "+ Add Filter" to add one.</div>
           </Show>
-          <div style={css(flex.row, { gap: theme.sizing.spacing.md, "margin-top": theme.sizing.spacing.sm })}>
-            <div style={css(flex.row, { gap: theme.sizing.spacing.xs, "align-items": "center" })}>
-              <span style={{ "font-size": "11px", color: theme.colors.textMuted }}>Sort:</span>
+          <div class="flex flex-row gap-[var(--spacing-md)] mt-[var(--spacing-sm)]">
+            <div class="flex flex-row gap-[var(--spacing-xs)] items-center">
+              <span class="text-[11px] text-text-muted">Sort:</span>
               <input
-                style={css({
-                  width: "100px",
-                  padding: theme.sizing.spacing.xs,
-                  background: theme.colors.bgSecondary,
-                  border: `1px solid ${theme.colors.border}`,
-                  "border-radius": theme.sizing.borderRadius,
-                  color: theme.colors.text,
-                  "font-size": "11px",
-                })}
+                class="w-[100px] p-[var(--spacing-xs)] bg-bg-secondary border border-border rounded-[var(--radius)] text-text text-[11px]"
                 placeholder="field"
                 value={sortField()}
                 onInput={(e) => setSortField(e.currentTarget.value)}
               />
               <select
-                style={css({
-                  padding: theme.sizing.spacing.xs,
-                  background: theme.colors.bgSecondary,
-                  border: `1px solid ${theme.colors.border}`,
-                  "border-radius": theme.sizing.borderRadius,
-                  color: theme.colors.text,
-                  "font-size": "11px",
-                })}
+                class="p-[var(--spacing-xs)] bg-bg-secondary border border-border rounded-[var(--radius)] text-text text-[11px]"
                 value={sortDirection()}
                 onChange={(e) => setSortDirection(e.currentTarget.value as "asc" | "desc")}
               >
@@ -460,19 +329,11 @@ export function QueryPanel(props: QueryPanelProps) {
                 <option value="desc">DESC</option>
               </select>
             </div>
-            <div style={css(flex.row, { gap: theme.sizing.spacing.xs, "align-items": "center" })}>
-              <span style={{ "font-size": "11px", color: theme.colors.textMuted }}>Limit:</span>
+            <div class="flex flex-row gap-[var(--spacing-xs)] items-center">
+              <span class="text-[11px] text-text-muted">Limit:</span>
               <input
                 type="number"
-                style={css({
-                  width: "60px",
-                  padding: theme.sizing.spacing.xs,
-                  background: theme.colors.bgSecondary,
-                  border: `1px solid ${theme.colors.border}`,
-                  "border-radius": theme.sizing.borderRadius,
-                  color: theme.colors.text,
-                  "font-size": "11px",
-                })}
+                class="w-[60px] p-[var(--spacing-xs)] bg-bg-secondary border border-border rounded-[var(--radius)] text-text text-[11px]"
                 value={limit()}
                 onInput={(e) => setLimit(Number(e.currentTarget.value) || 25)}
               />
@@ -482,64 +343,45 @@ export function QueryPanel(props: QueryPanelProps) {
       </Show>
 
       <Show when={error()}>
-        <div style={errorStyle}>{error()}</div>
+        <div class="p-[var(--spacing-md)] bg-error/20 text-error text-xs">{error()}</div>
       </Show>
 
       <Show when={explanation()}>
         {(exp) => (
-          <div style={css({
-            padding: theme.sizing.spacing.md,
-            background: theme.colors.bgSecondary,
-            "border-bottom": `1px solid ${theme.colors.border}`,
-          })}>
-            <div style={css(flex.row, { gap: theme.sizing.spacing.md, "align-items": "center", "margin-bottom": theme.sizing.spacing.sm })}>
-              <span style={{ "font-weight": "600", "font-size": "12px" }}>Query Analysis</span>
-              <span style={css({
-                padding: `2px ${theme.sizing.spacing.xs}`,
-                "border-radius": "3px",
-                "font-size": "10px",
-                "font-weight": "600",
-                background: exp().efficiency === "index-only"
-                  ? `${theme.colors.success}30`
-                  : exp().efficiency === "partial-index"
-                    ? `${theme.colors.warning}30`
-                    : `${theme.colors.error}30`,
-                color: exp().efficiency === "index-only"
-                  ? theme.colors.success
-                  : exp().efficiency === "partial-index"
-                    ? theme.colors.warning
-                    : theme.colors.error,
-              })}>
+          <div class="p-[var(--spacing-md)] bg-bg-secondary border-b border-border">
+            <div class="flex flex-row gap-[var(--spacing-md)] items-center mb-[var(--spacing-sm)]">
+              <span class="font-semibold text-xs">Query Analysis</span>
+              <span class={`px-[var(--spacing-xs)] py-0.5 rounded-sm text-[10px] font-semibold ${efficiencyClasses(exp().efficiency)}`}>
                 {exp().efficiency === "index-only" ? "Efficient" : exp().efficiency === "partial-index" ? "Partial Index" : "Full Scan"}
               </span>
               <Button theme={theme} size="sm" onClick={() => setExplanation(null)}>×</Button>
             </div>
-            <div style={{ "font-size": "12px", display: "flex", gap: theme.sizing.spacing.lg }}>
+            <div class="text-xs flex gap-[var(--spacing-lg)]">
               <div>
-                <span style={{ color: theme.colors.textMuted }}>Uses Index: </span>
-                <span style={{ color: exp().usesIndex ? theme.colors.success : theme.colors.error }}>
+                <span class="text-text-muted">Uses Index: </span>
+                <span class={exp().usesIndex ? "text-success" : "text-error"}>
                   {exp().usesIndex ? "Yes" : "No"}
                 </span>
               </div>
               <Show when={exp().indexFields.length > 0}>
                 <div>
-                  <span style={{ color: theme.colors.textMuted }}>Index Fields: </span>
-                  <span style={{ "font-family": theme.fonts.mono }}>{exp().indexFields.join(", ")}</span>
+                  <span class="text-text-muted">Index Fields: </span>
+                  <span class="font-mono">{exp().indexFields.join(", ")}</span>
                 </div>
               </Show>
               <Show when={exp().uncoveredFields.length > 0}>
                 <div>
-                  <span style={{ color: theme.colors.textMuted }}>Uncovered: </span>
-                  <span style={{ "font-family": theme.fonts.mono, color: theme.colors.warning }}>{exp().uncoveredFields.join(", ")}</span>
+                  <span class="text-text-muted">Uncovered: </span>
+                  <span class="font-mono text-warning">{exp().uncoveredFields.join(", ")}</span>
                 </div>
               </Show>
             </div>
             <Show when={exp().suggestions.length > 0}>
-              <div style={{ "margin-top": theme.sizing.spacing.sm }}>
+              <div class="block mt-[var(--spacing-sm)]">
                 <For each={exp().suggestions}>
                   {(suggestion) => (
-                    <div style={{ "font-size": "11px", color: theme.colors.textMuted, display: "flex", "align-items": "center", gap: theme.sizing.spacing.xs }}>
-                      <span style={{ color: theme.colors.warning }}>💡</span> {suggestion}
+                    <div class="text-[11px] text-text-muted flex items-center gap-[var(--spacing-xs)]">
+                      <span class="text-warning">💡</span> {suggestion}
                     </div>
                   )}
                 </For>
@@ -549,27 +391,21 @@ export function QueryPanel(props: QueryPanelProps) {
         )}
       </Show>
 
-      <div style={resultsContainerStyle}>
-        <div style={resultsHeaderStyle}>
+      <div class="flex flex-col flex-1 overflow-auto border-t border-border">
+        <div class="flex flex-row justify-between p-[var(--spacing-md)] bg-bg-secondary text-xs shrink-0">
           <span>Results: {results().length}</span>
         </div>
-        <div style={scrollable}>
+        <div class="overflow-auto">
           <Show when={hasRun() && !isRunning() && !error() && results().length === 0}>
-            <div style={{ padding: theme.sizing.spacing.xl, "text-align": "center", color: theme.colors.textMuted }}>
-              Query returned no results
-            </div>
+            <div class="p-[var(--spacing-xl)] text-center text-text-muted">Query returned no results</div>
           </Show>
           <Show when={!hasRun() && !isRunning()}>
-            <div style={{ padding: theme.sizing.spacing.xl, "text-align": "center", color: theme.colors.textMuted }}>
-              Run a query to see results
-            </div>
+            <div class="p-[var(--spacing-xl)] text-center text-text-muted">Run a query to see results</div>
           </Show>
           <For each={results()}>
             {(doc) => (
-              <div style={resultRowStyle}>
-                <div style={{ color: theme.colors.accent, "margin-bottom": "4px" }}>
-                  {doc.id}
-                </div>
+              <div class="p-[var(--spacing-md)] border-b border-border font-mono text-[11px] whitespace-pre-wrap break-all">
+                <div class="text-accent mb-1">{doc.id}</div>
                 <JsonViewer theme={theme} data={doc.data} collapsed={true} />
               </div>
             )}
