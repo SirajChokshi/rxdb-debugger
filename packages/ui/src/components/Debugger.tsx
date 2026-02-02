@@ -1,6 +1,5 @@
 import { createSignal, createEffect, onCleanup, Match, Switch, type JSX } from "solid-js";
 import type { RxdbDebugger } from "@rxdb-debugger/core";
-import { css, flex, resetStyles } from "../styles/css.js";
 import {
   type Theme,
   type ThemeMode,
@@ -66,22 +65,16 @@ export function Debugger(props: DebuggerProps): JSX.Element {
     }
   });
 
-  const containerStyle = () =>
-    css(resetStyles, flex.col, {
-      width: props.width,
-      height: props.height,
-      background: theme().colors.bg,
-      color: theme().colors.text,
-      "font-family": theme().fonts.sans,
-      "font-size": "13px",
-      "line-height": "1.5",
-      "border-radius": theme().sizing.borderRadius,
-      overflow: "hidden",
-      border: `1px solid ${theme().colors.border}`,
-    });
+  const containerStyle = (): JSX.CSSProperties => ({
+    width: props.width,
+    height: props.height,
+  });
 
   return (
-    <div style={containerStyle()}>
+    <div
+      class="rxdb-debugger flex flex-col text-[13px] leading-normal rounded-[var(--radius)] overflow-hidden border border-border"
+      style={containerStyle()}
+    >
       <Tabs
         theme={theme()}
         tabs={TABS}

@@ -134,6 +134,13 @@ export function mountDebugger(options: MountDebuggerOptions): () => void {
   const resolvedTheme = resolveThemeMode(themeMode);
   const theme = getTheme(resolvedTheme);
 
+  const applyThemeClass = (themeName: "dark" | "light") => {
+    containerEl.classList.remove("theme-dark", "theme-light");
+    containerEl.classList.add(`theme-${themeName}`);
+  };
+
+  applyThemeClass(resolvedTheme);
+
   let colorSchemeCleanup: (() => void) | null = null;
 
   const dispose = render(
@@ -151,8 +158,8 @@ export function mountDebugger(options: MountDebuggerOptions): () => void {
   );
 
   if (themeMode === "auto") {
-    colorSchemeCleanup = onColorSchemeChange(() => {
-      // Theme changes are handled reactively in the Debugger component
+    colorSchemeCleanup = onColorSchemeChange((scheme) => {
+      applyThemeClass(scheme);
     });
   }
 
@@ -160,6 +167,7 @@ export function mountDebugger(options: MountDebuggerOptions): () => void {
     if (colorSchemeCleanup) {
       colorSchemeCleanup();
     }
+    containerEl.classList.remove("theme-dark", "theme-light");
     dispose();
     debuggerInstance.dispose();
   };
