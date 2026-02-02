@@ -1,11 +1,10 @@
-import { Observable, from, of, startWith, scan, map } from "rxjs";
+import { Observable, from, startWith, scan, map } from "rxjs";
 import { shareReplay } from "rxjs/operators";
 import { 
   evalInPage, 
   evalAsyncInPage, 
   getCollectionChanges, 
   getBridgeEvents,
-  type ChangeEventPayload 
 } from "./bridge.js";
 
 interface RemoteCollectionSchema {

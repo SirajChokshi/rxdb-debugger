@@ -10,52 +10,59 @@ type State =
   | { status: "error"; message: string }
   | { status: "connected" };
 
-const styles = {
-  container: `
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 100vh;
-    text-align: center;
-    padding: 32px;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  `,
-  icon: "font-size: 48px; margin-bottom: 16px;",
-  title: "margin: 0 0 8px; font-size: 18px; color: #fff;",
-  subtitle: "margin: 0 0 16px; color: #888; font-size: 14px;",
-  code: "background: #333; padding: 2px 6px; border-radius: 4px; font-family: monospace;",
-  pre: `
-    background: #111;
-    padding: 16px;
-    border-radius: 8px;
-    font-size: 12px;
-    color: #4ade80;
-    text-align: left;
-    font-family: monospace;
-  `,
-  button: `
-    margin-top: 16px;
-    padding: 8px 16px;
-    background: #3b82f6;
-    color: white;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 14px;
-  `,
-  errorTitle: "margin: 0 0 8px; font-size: 18px; color: #ef4444;",
-};
+function getStyles() {
+  const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+
+  return {
+    container: `
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      text-align: center;
+      padding: 32px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    `,
+    icon: "font-size: 48px; margin-bottom: 16px;",
+    title: `margin: 0 0 8px; font-size: 18px; color: ${isDark ? "#e4e4ef" : "#1f2328"};`,
+    subtitle: `margin: 0 0 16px; color: ${isDark ? "#9898a8" : "#57606a"}; font-size: 14px;`,
+    code: `background: ${isDark ? "#2a2a3a" : "#eaeef2"}; padding: 2px 6px; border-radius: 4px; font-family: monospace;`,
+    pre: `
+      background: ${isDark ? "#16161d" : "#f6f8fa"};
+      padding: 16px;
+      border-radius: 8px;
+      font-size: 12px;
+      color: ${isDark ? "#4ade80" : "#1a7f37"};
+      text-align: left;
+      font-family: monospace;
+    `,
+    button: `
+      margin-top: 16px;
+      padding: 8px 16px;
+      background: #8b7cf7;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+    `,
+    errorTitle: `margin: 0 0 8px; font-size: 18px; color: ${isDark ? "#f87171" : "#cf222e"};`,
+    loading: `color: ${isDark ? "#9898a8" : "#57606a"};`,
+  };
+}
 
 function LoadingScreen() {
+  const styles = getStyles();
   return (
     <div style={styles.container}>
-      <div style="color: #888;">Connecting to RxDB...</div>
+      <div style={styles.loading}>Connecting to RxDB...</div>
     </div>
   );
 }
 
 function NoDatabase(props: { onRetry: () => void }) {
+  const styles = getStyles();
   return (
     <div style={styles.container}>
       <div style={styles.icon}>🔍</div>
@@ -76,6 +83,7 @@ window.__rxdb_handle = db;`}
 }
 
 function ErrorScreen(props: { message: string }) {
+  const styles = getStyles();
   return (
     <div style={styles.container}>
       <div style={styles.icon}>❌</div>
@@ -117,7 +125,7 @@ function Panel() {
         debuggerCleanup = mountDebugger({
           container: containerRef,
           db: remoteDb,
-          theme: "dark",
+          theme: "auto",
         });
       }
     } catch (err) {

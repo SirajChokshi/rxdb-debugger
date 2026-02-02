@@ -37,6 +37,13 @@
         "react-hooks/rules-of-hooks": "error",
         "react-hooks/exhaustive-deps": "warn"
       }
+    },
+    {
+      "files": ["packages/ui/**/*.tsx", "packages/chrome-extension/**/*.tsx"],
+      "rules": {
+        "react/style-prop-object": "off",
+        "no-unassigned-vars": "off"
+      }
     }
   ]
 }

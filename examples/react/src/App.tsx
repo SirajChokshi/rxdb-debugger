@@ -242,7 +242,7 @@ export default function App(): JSX.Element {
       unmount = mountDebugger({
         container: debuggerRef.current,
         db,
-        theme: "dark",
+        theme: "auto",
         trackPerformance: true,
         initialPanel: "collections",
       });
