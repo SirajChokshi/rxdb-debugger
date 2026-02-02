@@ -1,7 +1,13 @@
-import { createSignal, Match, Switch, type JSX } from "solid-js";
+import { createSignal, createEffect, onCleanup, Match, Switch, type JSX } from "solid-js";
 import type { RxdbDebugger } from "@rxdb-debugger/core";
 import { css, flex, resetStyles } from "../styles/css.js";
-import type { Theme } from "../styles/theme.js";
+import {
+  type Theme,
+  type ThemeMode,
+  getTheme,
+  resolveThemeMode,
+  onColorSchemeChange,
+} from "../styles/theme.js";
 import { CollectionsPanel } from "./panels/CollectionsPanel.js";
 import { DocumentsPanel } from "./panels/DocumentsPanel.js";
 import { EventsPanel } from "./panels/EventsPanel.js";
@@ -18,7 +24,15 @@ export type PanelId =
 
 export interface DebuggerProps {
   debugger: RxdbDebugger;
-  theme: Theme;
+  /**
+   * Initial theme to use (resolved from themeMode).
+   */
+  initialTheme: Theme;
+  /**
+   * Theme mode for reactive color scheme changes.
+   * When "auto", theme will update when system preference changes.
+   */
+  themeMode: ThemeMode;
   width: string;
   height: string;
   initialPanel?: PanelId;
@@ -38,21 +52,33 @@ export function Debugger(props: DebuggerProps): JSX.Element {
     props.initialPanel ?? "collections"
   );
 
-  const { theme } = props;
+  const [theme, setTheme] = createSignal<Theme>(props.initialTheme);
   const allowMutations = props.allowMutations ?? false;
 
-  const containerStyle = css(resetStyles, flex.col, {
-    width: props.width,
-    height: props.height,
-    background: theme.colors.bg,
-    color: theme.colors.text,
-    "font-family": theme.fonts.sans,
-    "font-size": "13px",
-    "line-height": "1.5",
-    "border-radius": theme.sizing.borderRadius,
-    overflow: "hidden",
-    border: `1px solid ${theme.colors.border}`,
+  createEffect(() => {
+    if (props.themeMode === "auto") {
+      const cleanup = onColorSchemeChange((scheme) => {
+        setTheme(getTheme(scheme));
+      });
+      onCleanup(cleanup);
+    } else {
+      setTheme(getTheme(resolveThemeMode(props.themeMode)));
+    }
   });
+
+  const containerStyle = () =>
+    css(resetStyles, flex.col, {
+      width: props.width,
+      height: props.height,
+      background: theme().colors.bg,
+      color: theme().colors.text,
+      "font-family": theme().fonts.sans,
+      "font-size": "13px",
+      "line-height": "1.5",
+      "border-radius": theme().sizing.borderRadius,
+      overflow: "hidden",
+      border: `1px solid ${theme().colors.border}`,
+    });
 
   const contentStyle = css(flex.col, {
     flex: "1",
@@ -61,9 +87,9 @@ export function Debugger(props: DebuggerProps): JSX.Element {
   });
 
   return (
-    <div style={containerStyle}>
+    <div style={containerStyle()}>
       <Tabs
-        theme={theme}
+        theme={theme()}
         tabs={TABS}
         activeTab={activeTab()}
         onTabChange={(id) => setActiveTab(id as PanelId)}
@@ -71,23 +97,23 @@ export function Debugger(props: DebuggerProps): JSX.Element {
       <div style={contentStyle}>
         <Switch>
           <Match when={activeTab() === "collections"}>
-            <CollectionsPanel theme={theme} debugger={props.debugger} />
+            <CollectionsPanel theme={theme()} debugger={props.debugger} />
           </Match>
           <Match when={activeTab() === "documents"}>
             <DocumentsPanel
-              theme={theme}
+              theme={theme()}
               debugger={props.debugger}
               allowMutations={allowMutations}
             />
           </Match>
           <Match when={activeTab() === "query"}>
-            <QueryPanel theme={theme} debugger={props.debugger} />
+            <QueryPanel theme={theme()} debugger={props.debugger} />
           </Match>
           <Match when={activeTab() === "events"}>
-            <EventsPanel theme={theme} debugger={props.debugger} />
+            <EventsPanel theme={theme()} debugger={props.debugger} />
           </Match>
           <Match when={activeTab() === "performance"}>
-            <PerformancePanel theme={theme} debugger={props.debugger} />
+            <PerformancePanel theme={theme()} debugger={props.debugger} />
           </Match>
         </Switch>
       </div>

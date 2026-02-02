@@ -43,16 +43,16 @@ export interface Theme {
 const darkTheme: Theme = {
   name: "dark",
   colors: {
-    bg: "#1e1e2e",
-    bgSecondary: "#2a2a3c",
-    bgHover: "#363649",
-    bgSelected: "#3d3d5c",
-    border: "#404052",
+    bg: "#0f0f14",
+    bgSecondary: "#16161d",
+    bgHover: "#1e1e28",
+    bgSelected: "#252533",
+    border: "#2a2a3a",
     text: "#e4e4ef",
-    textSecondary: "#a9a9b8",
-    textMuted: "#6c6c7a",
-    accent: "#7c6ef6",
-    accentHover: "#9486f7",
+    textSecondary: "#9898a8",
+    textMuted: "#5c5c6c",
+    accent: "#8b7cf7",
+    accentHover: "#a090f9",
     success: "#4ade80",
     warning: "#fbbf24",
     error: "#f87171",
@@ -82,18 +82,18 @@ const lightTheme: Theme = {
   name: "light",
   colors: {
     bg: "#ffffff",
-    bgSecondary: "#f5f5f7",
-    bgHover: "#ebebed",
-    bgSelected: "#e0e0e5",
-    border: "#d1d1d6",
-    text: "#1d1d1f",
-    textSecondary: "#6e6e73",
-    textMuted: "#8e8e93",
-    accent: "#6c5ce7",
-    accentHover: "#5847e0",
-    success: "#22c55e",
-    warning: "#f59e0b",
-    error: "#ef4444",
+    bgSecondary: "#f6f8fa",
+    bgHover: "#eaeef2",
+    bgSelected: "#dbe4ec",
+    border: "#d0d7de",
+    text: "#1f2328",
+    textSecondary: "#57606a",
+    textMuted: "#8b949e",
+    accent: "#7c5ce7",
+    accentHover: "#6944e0",
+    success: "#1a7f37",
+    warning: "#bf8700",
+    error: "#cf222e",
   },
   fonts: {
     sans: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
@@ -121,6 +121,62 @@ export const themes: { dark: Theme; light: Theme } = {
   light: lightTheme,
 };
 
+/**
+ * Theme mode options.
+ * - "dark": Force dark theme
+ * - "light": Force light theme
+ * - "auto": Use system/browser preference
+ */
+export type ThemeMode = "dark" | "light" | "auto";
+
 export function getTheme(name: "dark" | "light"): Theme {
   return themes[name];
+}
+
+/**
+ * Detects the preferred color scheme from the browser/system.
+ * Returns "dark" if the user prefers dark mode, "light" otherwise.
+ */
+export function detectColorScheme(): "dark" | "light" {
+  if (typeof window === "undefined") {
+    return "dark";
+  }
+
+  const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
+  return darkQuery.matches ? "dark" : "light";
+}
+
+/**
+ * Subscribes to color scheme changes.
+ * Calls the callback whenever the system color scheme changes.
+ *
+ * @param callback - Function to call when color scheme changes
+ * @returns Cleanup function to unsubscribe
+ */
+export function onColorSchemeChange(
+  callback: (scheme: "dark" | "light") => void
+): () => void {
+  if (typeof window === "undefined") {
+    return () => {};
+  }
+
+  const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
+
+  const handler = (e: MediaQueryListEvent) => {
+    callback(e.matches ? "dark" : "light");
+  };
+
+  darkQuery.addEventListener("change", handler);
+  return () => darkQuery.removeEventListener("change", handler);
+}
+
+/**
+ * Resolves a theme mode to an actual theme name.
+ * If mode is "auto", uses system preference detection.
+ */
+export function resolveThemeMode(mode: ThemeMode): "dark" | "light" {
+  if (mode === "auto") {
+    return detectColorScheme();
+  }
+  return mode;
 }

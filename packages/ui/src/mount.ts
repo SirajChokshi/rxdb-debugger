@@ -2,7 +2,12 @@ import type { RxDatabase } from "rxdb/plugins/core";
 import { render } from "solid-js/web";
 import { RxdbDebugger } from "@rxdb-debugger/core";
 import { Debugger, type PanelId } from "./components/Debugger.js";
-import { getTheme } from "./styles/theme.js";
+import {
+  getTheme,
+  resolveThemeMode,
+  onColorSchemeChange,
+  type ThemeMode,
+} from "./styles/theme.js";
 
 /**
  * Loose database input type for the UI mount function.
@@ -30,9 +35,12 @@ export interface MountDebuggerOptions {
   db: AnyDbInput;
 
   /**
-   * UI theme. Defaults to "dark".
+   * UI theme mode. Defaults to "dark".
+   * - "dark": Force dark theme
+   * - "light": Force light theme
+   * - "auto": Use system/browser preference and respond to changes
    */
-  theme?: "dark" | "light";
+  theme?: ThemeMode;
 
   /**
    * Initial panel to show. Defaults to "collections".
@@ -94,7 +102,7 @@ export function mountDebugger(options: MountDebuggerOptions): () => void {
   const {
     container,
     db,
-    theme: themeName = "dark",
+    theme: themeMode = "dark",
     initialPanel = "collections",
     allowMutations = false,
     trackPerformance = false,
@@ -123,13 +131,17 @@ export function mountDebugger(options: MountDebuggerOptions): () => void {
     eventBufferSize,
   });
 
-  const theme = getTheme(themeName);
+  const resolvedTheme = resolveThemeMode(themeMode);
+  const theme = getTheme(resolvedTheme);
+
+  let colorSchemeCleanup: (() => void) | null = null;
 
   const dispose = render(
     () =>
       Debugger({
         debugger: debuggerInstance,
-        theme,
+        initialTheme: theme,
+        themeMode,
         width,
         height,
         initialPanel,
@@ -138,7 +150,16 @@ export function mountDebugger(options: MountDebuggerOptions): () => void {
     containerEl,
   );
 
+  if (themeMode === "auto") {
+    colorSchemeCleanup = onColorSchemeChange(() => {
+      // Theme changes are handled reactively in the Debugger component
+    });
+  }
+
   return () => {
+    if (colorSchemeCleanup) {
+      colorSchemeCleanup();
+    }
     dispose();
     debuggerInstance.dispose();
   };

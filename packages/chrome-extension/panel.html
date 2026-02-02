@@ -11,15 +11,35 @@
       }
       body {
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        background: #1a1a1a;
-        color: #e0e0e0;
         min-height: 100vh;
+        background: var(--theme-bg, #0f0f14);
+        color: var(--theme-text, #e4e4ef);
+      }
+      body.theme-light {
+        --theme-bg: #ffffff;
+        --theme-text: #1f2328;
+      }
+      body.theme-dark {
+        --theme-bg: #0f0f14;
+        --theme-text: #e4e4ef;
       }
       #root {
         width: 100%;
         height: 100vh;
       }
     </style>
+    <script>
+      // Detect DevTools theme and apply appropriate class
+      (function() {
+        try {
+          var themeName = chrome.devtools && chrome.devtools.panels && chrome.devtools.panels.themeName;
+          document.body.classList.add(themeName === 'dark' ? 'theme-dark' : 'theme-light');
+        } catch (e) {
+          // Fallback for environments without chrome.devtools
+          document.body.classList.add('theme-dark');
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

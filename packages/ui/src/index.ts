@@ -12,4 +12,12 @@ export {
 
 export { type PanelId } from "./components/Debugger.js";
 
-export { type Theme, themes, getTheme } from "./styles/theme.js";
+export {
+  type Theme,
+  type ThemeMode,
+  themes,
+  getTheme,
+  detectColorScheme,
+  onColorSchemeChange,
+  resolveThemeMode,
+} from "./styles/theme.js";
