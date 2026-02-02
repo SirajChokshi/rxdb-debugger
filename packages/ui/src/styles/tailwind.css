@@ -1,0 +1,70 @@
+@import "tailwindcss";
+
+/* Scan all component source files to generate the CSS utilities they use */
+@source "../components/**/*.tsx";
+@source "../mount.ts";
+
+@theme {
+  /* Background colors */
+  --color-bg: #1e1e2e;
+  --color-bg-secondary: #2a2a3c;
+  --color-bg-hover: #363649;
+  --color-bg-selected: #3d3d5c;
+
+  /* Border */
+  --color-border: #404052;
+
+  /* Text colors */
+  --color-text: #e4e4ef;
+  --color-text-secondary: #a9a9b8;
+  --color-text-muted: #6c6c7a;
+
+  /* Semantic colors */
+  --color-accent: #7c6ef6;
+  --color-accent-hover: #9486f7;
+  --color-success: #4ade80;
+  --color-warning: #fbbf24;
+  --color-error: #f87171;
+
+  /* Fonts */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+
+  /* Border radius */
+  --radius: 6px;
+  --radius-sm: 4px;
+  --radius-lg: 8px;
+
+  /* Spacing scale */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 12px;
+  --spacing-lg: 16px;
+  --spacing-xl: 24px;
+}
+
+/* Base styles for standalone use */
+.rxdb-debugger {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+}
+
+/* Scrollbar styling */
+.rxdb-debugger ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.rxdb-debugger ::-webkit-scrollbar-track {
+  background: var(--color-bg-secondary);
+}
+
+.rxdb-debugger ::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 4px;
+}
+
+.rxdb-debugger ::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
+}

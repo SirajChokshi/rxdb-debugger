@@ -1,6 +1,5 @@
-import { createEffect, createSignal, For, onCleanup, Show, type JSX } from "solid-js";
+import { createEffect, createSignal, For, onCleanup, Show } from "solid-js";
 import type { RxdbDebugger, PropertyInfo, SchemaDetails, Relationship } from "@rxdb-debugger/core";
-import { css, ellipsis, flex, scrollable } from "../../styles/css.js";
 import type { Theme } from "../../styles/theme.js";
 import { fromExplorerQuery } from "../../utils/observable.js";
 
@@ -12,11 +11,9 @@ export interface CollectionsPanelProps {
 interface PropertyTreeProps {
   properties: PropertyInfo[];
   depth: number;
-  theme: Theme;
 }
 
 function PropertyTree(props: PropertyTreeProps) {
-  const { theme, depth } = props;
   const [expandedProps, setExpandedProps] = createSignal<Set<string>>(new Set());
 
   const toggleExpanded = (path: string) => {
@@ -46,59 +43,6 @@ function PropertyTree(props: PropertyTreeProps) {
     return parts.join(", ");
   };
 
-  const propertyRowStyle = css(flex.row, {
-    padding: `${theme.sizing.spacing.xs} 0`,
-    "font-size": "12px",
-    "border-bottom": `1px solid ${theme.colors.border}`,
-    "align-items": "flex-start",
-  });
-
-  const propertyNameStyle = css({
-    width: "140px",
-    "flex-shrink": "0",
-    "font-family": theme.fonts.mono,
-    color: theme.colors.accent,
-    display: "flex",
-    "align-items": "center",
-    gap: theme.sizing.spacing.xs,
-  });
-
-  const propertyTypeStyle = css({
-    width: "80px",
-    "flex-shrink": "0",
-    color: theme.colors.textSecondary,
-  });
-
-  const propertyInfoStyle = css({
-    flex: "1",
-    color: theme.colors.textMuted,
-    "font-size": "11px",
-  });
-
-  const expandButtonStyle = css({
-    background: "transparent",
-    border: "none",
-    color: theme.colors.textMuted,
-    cursor: "pointer",
-    padding: "0",
-    "font-size": "10px",
-    width: "14px",
-    "text-align": "center",
-  });
-
-  const nestedContainerStyle = css({
-    "padding-left": theme.sizing.spacing.md,
-    "border-left": `1px solid ${theme.colors.border}`,
-    "margin-left": theme.sizing.spacing.sm,
-  });
-
-  const enumListStyle = css({
-    "font-size": "11px",
-    color: theme.colors.textMuted,
-    "padding-left": theme.sizing.spacing.md,
-    "margin-top": theme.sizing.spacing.xs,
-  });
-
   return (
     <For each={props.properties}>
       {(prop) => {
@@ -106,54 +50,58 @@ function PropertyTree(props: PropertyTreeProps) {
         const hasNested = hasNestedContent(prop);
         return (
           <>
-            <div style={propertyRowStyle}>
-              <span style={css(propertyNameStyle, { "padding-left": `${depth * 12}px` })}>
+            <div class="flex flex-row py-[var(--spacing-xs)] text-xs border-b border-border items-start">
+              <span
+                class="w-[140px] shrink-0 font-mono text-accent flex items-center gap-[var(--spacing-xs)]"
+                style={{ "padding-left": `${props.depth * 12}px` }}
+              >
                 <Show when={hasNested}>
-                  <button style={expandButtonStyle} onClick={() => toggleExpanded(prop.path)}>
+                  <button
+                    class="bg-transparent border-none text-text-muted cursor-pointer p-0 text-[10px] w-3.5 text-center"
+                    onClick={() => toggleExpanded(prop.path)}
+                  >
                     {isExpanded() ? "▼" : "▶"}
                   </button>
                 </Show>
                 <Show when={!hasNested}>
-                  <span style={{ width: "14px" }} />
+                  <span class="w-3.5" />
                 </Show>
                 {prop.name}
               </span>
-              <span style={propertyTypeStyle}>
+              <span class="w-20 shrink-0 text-text-secondary">
                 {prop.type}
                 <Show when={prop.items}>
                   {"<"}{prop.items!.type}{">"}
                 </Show>
               </span>
-              <span style={propertyInfoStyle}>
+              <span class="flex-1 text-text-muted text-[11px]">
                 {formatConstraints(prop)}
                 <Show when={prop.enum && !isExpanded()}>
-                  <span style={{ color: theme.colors.warning }}> enum({prop.enum!.length})</span>
+                  <span class="text-warning"> enum({prop.enum!.length})</span>
                 </Show>
               </span>
             </div>
             <Show when={isExpanded()}>
               <Show when={prop.enum}>
-                <div style={enumListStyle}>
+                <div class="text-[11px] text-text-muted pl-[var(--spacing-md)] mt-[var(--spacing-xs)]">
                   <For each={prop.enum}>
                     {(v) => (
-                      <div style={{ padding: "2px 0" }}>
-                        <span style={{ color: theme.colors.success }}>{JSON.stringify(v)}</span>
+                      <div class="py-0.5">
+                        <span class="text-success">{JSON.stringify(v)}</span>
                       </div>
                     )}
                   </For>
                 </div>
               </Show>
               <Show when={prop.properties}>
-                <div style={nestedContainerStyle}>
-                  <PropertyTree properties={prop.properties!} depth={depth + 1} theme={theme} />
+                <div class="pl-[var(--spacing-md)] border-l border-border ml-[var(--spacing-sm)]">
+                  <PropertyTree properties={prop.properties!} depth={props.depth + 1} />
                 </div>
               </Show>
               <Show when={prop.items?.properties}>
-                <div style={nestedContainerStyle}>
-                  <div style={{ "font-size": "10px", color: theme.colors.textMuted, "margin-bottom": theme.sizing.spacing.xs }}>
-                    Array items:
-                  </div>
-                  <PropertyTree properties={prop.items!.properties!} depth={depth + 1} theme={theme} />
+                <div class="pl-[var(--spacing-md)] border-l border-border ml-[var(--spacing-sm)]">
+                  <div class="text-[10px] text-text-muted mb-[var(--spacing-xs)]">Array items:</div>
+                  <PropertyTree properties={prop.items!.properties!} depth={props.depth + 1} />
                 </div>
               </Show>
             </Show>
@@ -223,159 +171,59 @@ export function CollectionsPanel(props: CollectionsPanelProps) {
       .catch(() => setRelationships([]));
   });
 
-  const { theme } = props;
-
-  const containerStyle = css(isMobile() ? flex.col : flex.row, {
-    height: "100%",
-    overflow: "hidden",
-  });
-
-  const listStyle = css(flex.col, {
-    width: isMobile() ? "100%" : "240px",
-    "max-height": isMobile() ? "40%" : "100%",
-    "flex-shrink": "0",
-    "border-right": isMobile() ? "none" : `1px solid ${theme.colors.border}`,
-    "border-bottom": isMobile() ? `1px solid ${theme.colors.border}` : "none",
-    overflow: "hidden",
-  });
-
-  const listHeaderStyle = css(flex.col, {
-    padding: theme.sizing.spacing.md,
-    gap: theme.sizing.spacing.sm,
-    "border-bottom": `1px solid ${theme.colors.border}`,
-  });
-
-  const listTitleStyle = css({
-    "font-weight": "600",
-    "font-size": "11px",
-    "text-transform": "uppercase",
-    "letter-spacing": "0.5px",
-    color: theme.colors.textMuted,
-  });
-
-  const searchInputStyle = css({
-    padding: `${theme.sizing.spacing.xs} ${theme.sizing.spacing.sm}`,
-    background: theme.colors.bgSecondary,
-    color: theme.colors.text,
-    border: `1px solid ${theme.colors.border}`,
-    "border-radius": theme.sizing.borderRadius,
-    "font-size": "12px",
-    outline: "none",
-    width: "100%",
-  });
-
-  const listContentStyle = css(scrollable, {
-    flex: "1",
-    padding: theme.sizing.spacing.xs,
-  });
-
-  const itemStyle = (isSelected: boolean): JSX.CSSProperties =>
-    css(flex.row, {
-      padding: `${theme.sizing.spacing.sm} ${theme.sizing.spacing.md}`,
-      "border-radius": theme.sizing.borderRadius,
-      cursor: "pointer",
-      background: isSelected ? theme.colors.bgSelected : "transparent",
-      "margin-bottom": "2px",
-    });
-
-  const itemNameStyle = css(ellipsis, {
-    flex: "1",
-    "font-weight": "500",
-    "font-size": "13px",
-  });
-
-  const itemCountStyle = css({
-    "font-size": "11px",
-    color: theme.colors.textMuted,
-    "font-family": theme.fonts.mono,
-  });
-
-  const detailStyle = css(flex.col, scrollable, {
-    flex: "1",
-    padding: theme.sizing.spacing.md,
-  });
-
-  const sectionStyle = css({
-    "margin-bottom": theme.sizing.spacing.lg,
-  });
-
-  const sectionTitleStyle = css({
-    "font-weight": "600",
-    "font-size": "12px",
-    "margin-bottom": theme.sizing.spacing.sm,
-    color: theme.colors.text,
-  });
-
-  const indexStyle = css({
-    padding: `${theme.sizing.spacing.xs} ${theme.sizing.spacing.sm}`,
-    background: theme.colors.bgSecondary,
-    "border-radius": theme.sizing.borderRadius,
-    "font-family": theme.fonts.mono,
-    "font-size": "11px",
-    "margin-right": theme.sizing.spacing.xs,
-    "margin-bottom": theme.sizing.spacing.xs,
-    display: "inline-block",
-  });
-
   const formatCount = (count: number): string => {
     if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
     if (count >= 1_000) return `${(count / 1_000).toFixed(1)}K`;
     return String(count);
   };
 
+  const containerClasses = () => isMobile() ? "flex flex-col h-full overflow-hidden" : "flex flex-row h-full overflow-hidden";
+
+  const listClasses = () => {
+    const base = "flex flex-col shrink-0 overflow-hidden";
+    return isMobile()
+      ? `${base} w-full max-h-[40%] border-b border-border`
+      : `${base} w-60 h-full border-r border-border`;
+  };
+
   return (
-    <div style={containerStyle}>
-      <div style={listStyle}>
-        <div style={listHeaderStyle}>
-          <span style={listTitleStyle}>Collections</span>
+    <div class={containerClasses()}>
+      <div class={listClasses()}>
+        <div class="flex flex-col p-[var(--spacing-md)] gap-[var(--spacing-sm)] border-b border-border">
+          <span class="font-semibold text-[11px] uppercase tracking-wider text-text-muted">
+            Collections
+          </span>
           <input
-            style={searchInputStyle}
+            class="px-[var(--spacing-sm)] py-[var(--spacing-xs)] bg-bg-secondary text-text border border-border rounded-[var(--radius)] text-xs outline-none w-full"
             placeholder="Search collections..."
             value={searchQuery()}
             onInput={(e) => setSearchQuery(e.currentTarget.value)}
           />
         </div>
-        <div style={listContentStyle}>
+        <div class="flex-1 overflow-auto p-[var(--spacing-xs)]">
           <Show when={isLoading()}>
-            <div style={{ padding: theme.sizing.spacing.md, color: theme.colors.textMuted }}>
-              Loading...
-            </div>
+            <div class="p-[var(--spacing-md)] text-text-muted">Loading...</div>
           </Show>
           <Show when={error()}>
-            <div style={{ padding: theme.sizing.spacing.md, color: theme.colors.error, background: `${theme.colors.error}15`, "border-radius": theme.sizing.borderRadius }}>
-              {error()}
-            </div>
+            <div class="p-[var(--spacing-md)] text-error bg-error/10 rounded-[var(--radius)]">{error()}</div>
           </Show>
           <Show when={!isLoading() && !error() && collections().length === 0}>
-            <div style={{ padding: theme.sizing.spacing.md, color: theme.colors.textMuted, "text-align": "center" }}>
-              No collections found
-            </div>
+            <div class="p-[var(--spacing-md)] text-text-muted text-center">No collections found</div>
           </Show>
           <Show when={!isLoading() && !error() && collections().length > 0 && filteredCollections().length === 0}>
-            <div style={{ padding: theme.sizing.spacing.md, color: theme.colors.textMuted, "text-align": "center" }}>
-              No matching collections
-            </div>
+            <div class="p-[var(--spacing-md)] text-text-muted text-center">No matching collections</div>
           </Show>
           <For each={filteredCollections()}>
             {(col) => {
               const isSelected = () => selectedCollection() === col.name;
+              const itemClasses = () => {
+                const base = "flex flex-row px-[var(--spacing-md)] py-[var(--spacing-sm)] rounded-[var(--radius)] cursor-pointer mb-0.5";
+                return isSelected() ? `${base} bg-bg-selected` : `${base} hover:bg-bg-hover`;
+              };
               return (
-                <div
-                  style={itemStyle(isSelected())}
-                  onClick={() => setSelectedCollection(col.name)}
-                  onMouseEnter={(e) => {
-                    if (!isSelected()) {
-                      e.currentTarget.style.background = theme.colors.bgHover;
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isSelected()) {
-                      e.currentTarget.style.background = "transparent";
-                    }
-                  }}
-                >
-                  <span style={itemNameStyle}>{col.name}</span>
-                  <span style={itemCountStyle}>{formatCount(col.count)}</span>
+                <div class={itemClasses()} onClick={() => setSelectedCollection(col.name)}>
+                  <span class="flex-1 font-medium text-[13px] truncate">{col.name}</span>
+                  <span class="text-[11px] text-text-muted font-mono">{formatCount(col.count)}</span>
                 </div>
               );
             }}
@@ -383,46 +231,44 @@ export function CollectionsPanel(props: CollectionsPanelProps) {
         </div>
       </div>
 
-      <div style={detailStyle}>
+      <div class="flex flex-col flex-1 overflow-auto p-[var(--spacing-md)]">
         <Show when={schemaLoading()}>
-          <div style={{ color: theme.colors.textMuted }}>
-            Loading schema...
-          </div>
+          <div class="text-text-muted">Loading schema...</div>
         </Show>
         <Show when={schemaError()}>
-          <div style={{ color: theme.colors.error, background: `${theme.colors.error}15`, padding: theme.sizing.spacing.md, "border-radius": theme.sizing.borderRadius }}>
-            {schemaError()}
-          </div>
+          <div class="text-error bg-error/10 p-[var(--spacing-md)] rounded-[var(--radius)]">{schemaError()}</div>
         </Show>
         <Show when={!schemaLoading() && !schemaError() && !schema() && !selectedCollection()}>
-          <div style={{ color: theme.colors.textMuted }}>
-            Select a collection to view its schema
-          </div>
+          <div class="text-text-muted">Select a collection to view its schema</div>
         </Show>
         <Show when={schema()}>
           {(s) => (
             <>
-              <div style={sectionStyle}>
-                <div style={sectionTitleStyle}>
+              <div class="block mb-[var(--spacing-lg)]">
+                <div class="font-semibold text-xs mb-[var(--spacing-sm)] text-text">
                   {s().name} (v{s().version})
                 </div>
-                <div style={{ "font-size": "12px", color: theme.colors.textSecondary }}>
-                  Primary key: <span style={{ "font-family": theme.fonts.mono }}>{s().primaryKey}</span>
+                <div class="text-xs text-text-secondary">
+                  Primary key: <span class="font-mono">{s().primaryKey}</span>
                 </div>
               </div>
 
-              <div style={sectionStyle}>
-                <div style={sectionTitleStyle}>Properties ({s().properties.length})</div>
-                <PropertyTree properties={s().properties} depth={0} theme={theme} />
+              <div class="block mb-[var(--spacing-lg)]">
+                <div class="font-semibold text-xs mb-[var(--spacing-sm)] text-text">
+                  Properties ({s().properties.length})
+                </div>
+                <PropertyTree properties={s().properties} depth={0} />
               </div>
 
               <Show when={s().indexes.length > 0}>
-                <div style={sectionStyle}>
-                  <div style={sectionTitleStyle}>Indexes ({s().indexes.length})</div>
+                <div class="block mb-[var(--spacing-lg)]">
+                  <div class="font-semibold text-xs mb-[var(--spacing-sm)] text-text">
+                    Indexes ({s().indexes.length})
+                  </div>
                   <div>
                     <For each={s().indexes}>
                       {(idx) => (
-                        <span style={indexStyle}>
+                        <span class="inline-block px-[var(--spacing-sm)] py-[var(--spacing-xs)] bg-bg-secondary rounded-[var(--radius)] font-mono text-[11px] mr-[var(--spacing-xs)] mb-[var(--spacing-xs)]">
                           {idx.fields.join(" + ")}
                           {idx.compound && " (compound)"}
                         </span>
@@ -439,19 +285,17 @@ export function CollectionsPanel(props: CollectionsPanelProps) {
                 const hasRelations = outgoing.length > 0 || incoming.length > 0;
                 return (
                   <Show when={hasRelations}>
-                    <div style={sectionStyle}>
-                      <div style={sectionTitleStyle}>Relationships</div>
+                    <div class="block mb-[var(--spacing-lg)]">
+                      <div class="font-semibold text-xs mb-[var(--spacing-sm)] text-text">Relationships</div>
                       <Show when={outgoing.length > 0}>
-                        <div style={{ "margin-bottom": theme.sizing.spacing.sm }}>
-                          <div style={{ "font-size": "11px", color: theme.colors.textMuted, "margin-bottom": theme.sizing.spacing.xs }}>
-                            References
-                          </div>
+                        <div class="block mb-[var(--spacing-sm)]">
+                          <div class="text-[11px] text-text-muted mb-[var(--spacing-xs)]">References</div>
                           <For each={outgoing}>
                             {(rel) => (
-                              <div style={{ "font-size": "12px", padding: `${theme.sizing.spacing.xs} 0` }}>
-                                <span style={{ "font-family": theme.fonts.mono, color: theme.colors.accent }}>{rel.from.field}</span>
-                                <span style={{ color: theme.colors.textMuted }}> → </span>
-                                <span style={{ color: theme.colors.success }}>{rel.to.collection}</span>
+                              <div class="text-xs py-[var(--spacing-xs)]">
+                                <span class="font-mono text-accent">{rel.from.field}</span>
+                                <span class="text-text-muted"> → </span>
+                                <span class="text-success">{rel.to.collection}</span>
                               </div>
                             )}
                           </For>
@@ -459,15 +303,13 @@ export function CollectionsPanel(props: CollectionsPanelProps) {
                       </Show>
                       <Show when={incoming.length > 0}>
                         <div>
-                          <div style={{ "font-size": "11px", color: theme.colors.textMuted, "margin-bottom": theme.sizing.spacing.xs }}>
-                            Referenced by
-                          </div>
+                          <div class="text-[11px] text-text-muted mb-[var(--spacing-xs)]">Referenced by</div>
                           <For each={incoming}>
                             {(rel) => (
-                              <div style={{ "font-size": "12px", padding: `${theme.sizing.spacing.xs} 0` }}>
-                                <span style={{ color: theme.colors.warning }}>{rel.from.collection}</span>
-                                <span style={{ color: theme.colors.textMuted }}>.</span>
-                                <span style={{ "font-family": theme.fonts.mono, color: theme.colors.accent }}>{rel.from.field}</span>
+                              <div class="text-xs py-[var(--spacing-xs)]">
+                                <span class="text-warning">{rel.from.collection}</span>
+                                <span class="text-text-muted">.</span>
+                                <span class="font-mono text-accent">{rel.from.field}</span>
                               </div>
                             )}
                           </For>

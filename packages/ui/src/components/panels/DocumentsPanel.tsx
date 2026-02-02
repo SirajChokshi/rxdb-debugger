@@ -1,7 +1,6 @@
-import { createEffect, createSignal, createMemo, For, onCleanup, Show, type JSX } from "solid-js";
+import { createEffect, createSignal, createMemo, For, onCleanup, Show } from "solid-js";
 import type { RxdbDebugger, DiffResult, DocumentResult, SchemaDetails, DocumentVersion } from "@rxdb-debugger/core";
 import { Table, type TableColumn } from "../shared/Table.js";
-import { css, ellipsis, flex, scrollable } from "../../styles/css.js";
 import type { Theme } from "../../styles/theme.js";
 import { Button } from "../shared/Button.js";
 import { JsonDiff } from "../shared/JsonDiff.js";
@@ -16,6 +15,12 @@ export interface DocumentsPanelProps {
 }
 
 const PAGE_SIZE = 50;
+
+const opBadgeClasses = {
+  INSERT: "bg-success/30 text-success",
+  UPDATE: "bg-warning/30 text-warning",
+  DELETE: "bg-error/30 text-error",
+};
 
 export function DocumentsPanel(props: DocumentsPanelProps) {
   const [collections, setCollections] = createSignal<string[]>([]);
@@ -39,6 +44,8 @@ export function DocumentsPanel(props: DocumentsPanelProps) {
   const [showHistory, setShowHistory] = createSignal(false);
   const [docHistory, setDocHistory] = createSignal<DocumentVersion[]>([]);
   const [isMobile, setIsMobile] = createSignal(false);
+
+  const { theme } = props;
 
   createEffect(() => {
     const checkWidth = () => setIsMobile(window.innerWidth < 768);
@@ -81,7 +88,6 @@ export function DocumentsPanel(props: DocumentsPanelProps) {
   createEffect(() => {
     const collection = selectedCollection();
     if (!collection) return;
-
     setIsLoading(true);
     setDocuments([]);
     setSelectedDoc(null);
@@ -163,9 +169,7 @@ export function DocumentsPanel(props: DocumentsPanelProps) {
     const doc = selectedDoc();
     const collection = selectedCollection();
     if (!doc || !collection || !props.allowMutations) return;
-
     if (!confirm(`Delete document ${doc.id}?`)) return;
-
     await props.debugger.documents.delete(collection, doc.id);
     setSelectedDoc(null);
   };
@@ -182,7 +186,6 @@ export function DocumentsPanel(props: DocumentsPanelProps) {
     const doc = selectedDoc();
     const collection = selectedCollection();
     if (!doc || !collection || !props.debugger.history) return;
-
     props.debugger.history.getVersions(collection, doc.id).get()
       .then((versions) => {
         setDocHistory(versions);
@@ -212,13 +215,10 @@ export function DocumentsPanel(props: DocumentsPanelProps) {
   const saveDocument = async () => {
     const collection = selectedCollection();
     if (!collection || !props.allowMutations) return;
-
     setIsSaving(true);
     setEditError(null);
-
     try {
       const data = JSON.parse(editingJson());
-
       if (isInserting()) {
         await props.debugger.documents.insert(collection, data);
         setIsInserting(false);
@@ -236,112 +236,6 @@ export function DocumentsPanel(props: DocumentsPanelProps) {
       setIsSaving(false);
     }
   };
-
-  const { theme } = props;
-
-  const containerStyle = css(flex.row, {
-    height: "100%",
-    overflow: "hidden",
-    position: "relative",
-  });
-
-  const listStyle = css(flex.col, {
-    flex: "1",
-    "min-width": "0",
-    overflow: "hidden",
-  });
-
-  const toolbarStyle = css(flex.row, {
-    padding: theme.sizing.spacing.md,
-    gap: theme.sizing.spacing.sm,
-    "border-bottom": `1px solid ${theme.colors.border}`,
-    "align-items": "center",
-    "flex-shrink": "0",
-  });
-
-  const selectStyle = css({
-    padding: `${theme.sizing.spacing.xs} ${theme.sizing.spacing.sm}`,
-    background: theme.colors.bgSecondary,
-    color: theme.colors.text,
-    border: `1px solid ${theme.colors.border}`,
-    "border-radius": theme.sizing.borderRadius,
-    "font-size": "12px",
-  });
-
-  const searchStyle = css({
-    flex: "1",
-    padding: `${theme.sizing.spacing.xs} ${theme.sizing.spacing.sm}`,
-    background: theme.colors.bgSecondary,
-    color: theme.colors.text,
-    border: `1px solid ${theme.colors.border}`,
-    "border-radius": theme.sizing.borderRadius,
-    "font-size": "12px",
-    outline: "none",
-  });
-
-  const countStyle = css({
-    "font-size": "11px",
-    color: theme.colors.textMuted,
-  });
-
-  const docListStyle = css(scrollable, {
-    flex: "1",
-  });
-
-  const docRowStyle = (isSelected: boolean, isCompare: boolean): JSX.CSSProperties =>
-    css(flex.row, {
-      padding: `${theme.sizing.spacing.sm} ${theme.sizing.spacing.md}`,
-      "border-bottom": `1px solid ${theme.colors.border}`,
-      cursor: "pointer",
-      background: isCompare
-        ? `${theme.colors.warning}20`
-        : isSelected
-          ? theme.colors.bgSelected
-          : "transparent",
-      gap: theme.sizing.spacing.md,
-    });
-
-  const docIdStyle = css(ellipsis, {
-    width: "160px",
-    "flex-shrink": "0",
-    "font-family": theme.fonts.mono,
-    "font-size": "12px",
-    color: theme.colors.accent,
-  });
-
-  const docPreviewStyle = css(ellipsis, {
-    flex: "1",
-    "font-size": "12px",
-    color: theme.colors.textSecondary,
-  });
-
-  const detailStyle = css(flex.col, isMobile() ? {
-    position: "absolute",
-    inset: "0",
-    background: theme.colors.bg,
-    "z-index": "50",
-  } : {
-    width: "400px",
-    "flex-shrink": "0",
-    "border-left": `1px solid ${theme.colors.border}`,
-    overflow: "hidden",
-  });
-
-  const detailHeaderStyle = css(flex.row, flex.between, {
-    padding: theme.sizing.spacing.md,
-    "border-bottom": `1px solid ${theme.colors.border}`,
-    "align-items": "center",
-    "flex-shrink": "0",
-  });
-
-  const detailContentStyle = css(scrollable, {
-    flex: "1",
-    padding: theme.sizing.spacing.md,
-    "font-family": theme.fonts.mono,
-    "font-size": "11px",
-    "white-space": "pre-wrap",
-    "word-break": "break-all",
-  });
 
   const getDocPreview = (data: Record<string, unknown>): string => {
     const keys = Object.keys(data).slice(0, 4);
@@ -390,12 +284,31 @@ export function DocumentsPanel(props: DocumentsPanelProps) {
     return columns;
   };
 
+  const modeButtonClasses = (isActive: boolean) => {
+    const base = "px-[var(--spacing-sm)] py-[var(--spacing-xs)] border-none rounded-[var(--radius)] cursor-pointer text-[11px]";
+    return isActive ? `${base} bg-accent text-white` : `${base} bg-transparent text-text-muted`;
+  };
+
+  const docRowClasses = (isSelected: boolean, isCompare: boolean) => {
+    const base = "flex flex-row px-[var(--spacing-md)] py-[var(--spacing-sm)] border-b border-border cursor-pointer gap-[var(--spacing-md)]";
+    if (isCompare) return `${base} bg-warning/20`;
+    if (isSelected) return `${base} bg-bg-selected`;
+    return `${base} hover:bg-bg-hover`;
+  };
+
+  const detailClasses = () => {
+    if (isMobile()) {
+      return "flex flex-col absolute inset-0 bg-bg z-50";
+    }
+    return "flex flex-col w-[400px] shrink-0 border-l border-border overflow-hidden";
+  };
+
   return (
-    <div style={containerStyle}>
-      <div style={listStyle}>
-        <div style={toolbarStyle}>
+    <div class="flex flex-row h-full overflow-hidden relative">
+      <div class="flex flex-col flex-1 min-w-0 overflow-hidden">
+        <div class="flex flex-row p-[var(--spacing-md)] gap-[var(--spacing-sm)] border-b border-border items-center shrink-0">
           <select
-            style={selectStyle}
+            class="px-[var(--spacing-sm)] py-[var(--spacing-xs)] bg-bg-secondary text-text border border-border rounded-[var(--radius)] text-xs"
             value={selectedCollection()}
             onChange={(e) => setSelectedCollection(e.currentTarget.value)}
           >
@@ -404,7 +317,7 @@ export function DocumentsPanel(props: DocumentsPanelProps) {
             </For>
           </select>
           <input
-            style={searchStyle}
+            class="flex-1 px-[var(--spacing-sm)] py-[var(--spacing-xs)] bg-bg-secondary text-text border border-border rounded-[var(--radius)] text-xs outline-none"
             placeholder="Search documents..."
             value={searchTerm()}
             onInput={(e) => setSearchTerm(e.currentTarget.value)}
@@ -418,81 +331,41 @@ export function DocumentsPanel(props: DocumentsPanelProps) {
             {compareMode() ? "Exit Compare" : "Compare"}
           </Button>
           <Show when={props.allowMutations}>
-            <Button
-              theme={theme}
-              variant="primary"
-              size="sm"
-              onClick={startInserting}
-            >
+            <Button theme={theme} variant="primary" size="sm" onClick={startInserting}>
               + New
             </Button>
           </Show>
-          <div style={css(flex.row, { gap: "2px", background: theme.colors.bgSecondary, "border-radius": theme.sizing.borderRadius, padding: "2px" })}>
-            <button
-              style={css({
-                padding: `${theme.sizing.spacing.xs} ${theme.sizing.spacing.sm}`,
-                border: "none",
-                "border-radius": theme.sizing.borderRadius,
-                cursor: "pointer",
-                "font-size": "11px",
-                background: viewMode() === "list" ? theme.colors.accent : "transparent",
-                color: viewMode() === "list" ? "#fff" : theme.colors.textMuted,
-              })}
-              onClick={() => setViewMode("list")}
-            >
+          <div class="flex flex-row gap-0.5 bg-bg-secondary rounded-[var(--radius)] p-0.5">
+            <button class={modeButtonClasses(viewMode() === "list")} onClick={() => setViewMode("list")}>
               List
             </button>
-            <button
-              style={css({
-                padding: `${theme.sizing.spacing.xs} ${theme.sizing.spacing.sm}`,
-                border: "none",
-                "border-radius": theme.sizing.borderRadius,
-                cursor: "pointer",
-                "font-size": "11px",
-                background: viewMode() === "table" ? theme.colors.accent : "transparent",
-                color: viewMode() === "table" ? "#fff" : theme.colors.textMuted,
-              })}
-              onClick={() => setViewMode("table")}
-            >
+            <button class={modeButtonClasses(viewMode() === "table")} onClick={() => setViewMode("table")}>
               Table
             </button>
           </div>
-          <span style={countStyle}>
+          <span class="text-[11px] text-text-muted">
             {filteredDocs().length} / {totalCount()}
           </span>
         </div>
 
         <Show when={compareMode()}>
-          <div style={css({
-            padding: theme.sizing.spacing.sm,
-            background: `${theme.colors.warning}20`,
-            "font-size": "12px",
-            color: theme.colors.warning,
-          })}>
+          <div class="p-[var(--spacing-sm)] bg-warning/20 text-xs text-warning">
             Compare mode: Select two documents to compare
           </div>
         </Show>
 
-        <div style={docListStyle}>
+        <div class="flex-1 overflow-auto">
           <Show when={isLoading()}>
-            <div style={{ padding: theme.sizing.spacing.xl, "text-align": "center", color: theme.colors.textMuted }}>
-              Loading...
-            </div>
+            <div class="p-[var(--spacing-xl)] text-center text-text-muted">Loading...</div>
           </Show>
           <Show when={error()}>
-            <div style={{ padding: theme.sizing.spacing.md, margin: theme.sizing.spacing.md, color: theme.colors.error, background: `${theme.colors.error}15`, "border-radius": theme.sizing.borderRadius }}>
-              {error()}
-            </div>
+            <div class="p-[var(--spacing-md)] m-[var(--spacing-md)] text-error bg-error/10 rounded-[var(--radius)]">{error()}</div>
           </Show>
           <Show when={!isLoading() && !error() && documents().length === 0}>
-            <div style={{ padding: theme.sizing.spacing.xl, "text-align": "center", color: theme.colors.textMuted }}>
-              No documents in this collection
-            </div>
+            <div class="p-[var(--spacing-xl)] text-center text-text-muted">No documents in this collection</div>
           </Show>
           <Show when={!isLoading() && !error() && documents().length > 0 && filteredDocs().length === 0}>
-            <div style={{ padding: theme.sizing.spacing.xl, "text-align": "center", color: theme.colors.textMuted }}>
-              No documents match your search
-            </div>
+            <div class="p-[var(--spacing-xl)] text-center text-text-muted">No documents match your search</div>
           </Show>
 
           <Show when={viewMode() === "list"}>
@@ -501,22 +374,9 @@ export function DocumentsPanel(props: DocumentsPanelProps) {
                 const isSelected = () => selectedDoc()?.id === doc.id;
                 const isCompare = () => compareDoc()?.id === doc.id;
                 return (
-                  <div
-                    style={docRowStyle(isSelected(), isCompare())}
-                    onClick={() => handleDocClick(doc)}
-                    onMouseEnter={(e) => {
-                      if (!isSelected() && !isCompare()) {
-                        e.currentTarget.style.background = theme.colors.bgHover;
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!isSelected() && !isCompare()) {
-                        e.currentTarget.style.background = "transparent";
-                      }
-                    }}
-                  >
-                    <span style={docIdStyle}>{doc.id}</span>
-                    <span style={docPreviewStyle}>{getDocPreview(doc.data)}</span>
+                  <div class={docRowClasses(isSelected(), isCompare())} onClick={() => handleDocClick(doc)}>
+                    <span class="w-[160px] shrink-0 font-mono text-xs text-accent truncate">{doc.id}</span>
+                    <span class="flex-1 text-xs text-text-secondary truncate">{getDocPreview(doc.data)}</span>
                   </div>
                 );
               }}
@@ -538,24 +398,18 @@ export function DocumentsPanel(props: DocumentsPanelProps) {
       </div>
 
       <Show when={selectedDoc() || diffResult()}>
-        <div style={detailStyle}>
-          <div style={detailHeaderStyle}>
-            <span style={{ "font-weight": "600", "font-size": "12px", "font-family": theme.fonts.mono }}>
+        <div class={detailClasses()}>
+          <div class="flex flex-row justify-between p-[var(--spacing-md)] border-b border-border items-center shrink-0">
+            <span class="font-semibold text-xs font-mono">
               {diffResult() ? "Document Comparison" : selectedDoc()?.id}
             </span>
-            <div style={css(flex.row, { gap: theme.sizing.spacing.xs })}>
+            <div class="flex flex-row gap-[var(--spacing-xs)]">
               <Show when={selectedDoc() && !diffResult()}>
-                <Button theme={theme} size="sm" onClick={loadHistory}>
-                  History
-                </Button>
+                <Button theme={theme} size="sm" onClick={loadHistory}>History</Button>
               </Show>
               <Show when={props.allowMutations && selectedDoc() && !diffResult()}>
-                <Button theme={theme} size="sm" onClick={startEditing}>
-                  Edit
-                </Button>
-                <Button theme={theme} size="sm" variant="danger" onClick={deleteDocument}>
-                  Delete
-                </Button>
+                <Button theme={theme} size="sm" onClick={startEditing}>Edit</Button>
+                <Button theme={theme} size="sm" variant="danger" onClick={deleteDocument}>Delete</Button>
               </Show>
               <Button theme={theme} size="sm" onClick={() => { setSelectedDoc(null); setCompareDoc(null); setDiffResult(null); setShowHistory(false); }}>
                 ×
@@ -563,42 +417,25 @@ export function DocumentsPanel(props: DocumentsPanelProps) {
             </div>
           </div>
           <Show when={showHistory()}>
-            <div style={css(detailContentStyle, { padding: "0" })}>
-              <div style={{ padding: theme.sizing.spacing.sm, background: theme.colors.bgSecondary, "font-size": "11px", display: "flex", "justify-content": "space-between", "align-items": "center" }}>
+            <div class="flex-1 overflow-auto">
+              <div class="p-[var(--spacing-sm)] bg-bg-secondary text-[11px] flex justify-between items-center">
                 <span>Version History</span>
                 <Button theme={theme} size="sm" onClick={() => setShowHistory(false)}>Back</Button>
               </div>
-              <div style={css(scrollable, { flex: "1" })}>
+              <div class="flex-1 overflow-auto">
                 <Show when={docHistory().length === 0}>
-                  <div style={{ padding: theme.sizing.spacing.xl, "text-align": "center", color: theme.colors.textMuted }}>
-                    No history recorded for this document
-                  </div>
+                  <div class="p-[var(--spacing-xl)] text-center text-text-muted">No history recorded for this document</div>
                 </Show>
                 <For each={docHistory()}>
                   {(version) => (
                     <div
-                      style={css(flex.row, {
-                        padding: theme.sizing.spacing.sm,
-                        "border-bottom": `1px solid ${theme.colors.border}`,
-                        cursor: "pointer",
-                        gap: theme.sizing.spacing.sm,
-                        "align-items": "center",
-                      })}
+                      class="flex flex-row p-[var(--spacing-sm)] border-b border-border cursor-pointer gap-[var(--spacing-sm)] items-center hover:bg-bg-hover"
                       onClick={() => selectVersion(version)}
-                      onMouseEnter={(e) => { e.currentTarget.style.background = theme.colors.bgHover; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
                     >
-                      <span style={css({
-                        padding: `2px ${theme.sizing.spacing.xs}`,
-                        "border-radius": "3px",
-                        "font-size": "10px",
-                        "font-weight": "600",
-                        background: version.operation === "INSERT" ? `${theme.colors.success}30` : version.operation === "UPDATE" ? `${theme.colors.warning}30` : `${theme.colors.error}30`,
-                        color: version.operation === "INSERT" ? theme.colors.success : version.operation === "UPDATE" ? theme.colors.warning : theme.colors.error,
-                      })}>
+                      <span class={`px-[var(--spacing-xs)] py-0.5 rounded-sm text-[10px] font-semibold ${opBadgeClasses[version.operation]}`}>
                         {version.operation}
                       </span>
-                      <span style={{ "font-size": "11px", color: theme.colors.textMuted, "font-family": theme.fonts.mono }}>
+                      <span class="text-[11px] text-text-muted font-mono">
                         {new Date(version.timestamp).toLocaleString()}
                       </span>
                     </div>
@@ -609,17 +446,17 @@ export function DocumentsPanel(props: DocumentsPanelProps) {
           </Show>
           <Show when={!showHistory()}>
             <Show when={diffResult()} fallback={
-              <div style={css(detailContentStyle, { padding: "0" })}>
+              <div class="flex-1 overflow-auto p-0">
                 <JsonViewer theme={theme} data={selectedDoc()?.data} collapsed={false} />
               </div>
             }>
               {(diff) => (
-                <div style={css(detailContentStyle, { padding: "0" })}>
-                  <div style={{ padding: theme.sizing.spacing.sm, background: theme.colors.bgSecondary, "font-size": "11px" }}>
-                    <span style={{ color: theme.colors.accent }}>{selectedDoc()?.id}</span>
+                <div class="flex-1 overflow-auto p-0">
+                  <div class="p-[var(--spacing-sm)] bg-bg-secondary text-[11px]">
+                    <span class="text-accent">{selectedDoc()?.id}</span>
                     {" vs "}
-                    <span style={{ color: theme.colors.warning }}>{compareDoc()?.id}</span>
-                    {diff().equal && <span style={{ color: theme.colors.success }}> (identical)</span>}
+                    <span class="text-warning">{compareDoc()?.id}</span>
+                    {diff().equal && <span class="text-success"> (identical)</span>}
                   </div>
                   <JsonDiff theme={theme} changes={diff().changes} />
                 </div>
@@ -630,36 +467,17 @@ export function DocumentsPanel(props: DocumentsPanelProps) {
       </Show>
 
       <Show when={isEditing() || isInserting()}>
-        <div style={css({
-          position: "absolute",
-          inset: "0",
-          background: "rgba(0,0,0,0.7)",
-          display: "flex",
-          "align-items": "center",
-          "justify-content": "center",
-          "z-index": "100",
-        })}>
-          <div style={css(flex.col, {
-            width: "500px",
-            "max-height": "80%",
-            background: theme.colors.bg,
-            "border-radius": theme.sizing.borderRadius,
-            border: `1px solid ${theme.colors.border}`,
-            overflow: "hidden",
-          })}>
-            <div style={css(flex.row, flex.between, {
-              padding: theme.sizing.spacing.md,
-              "border-bottom": `1px solid ${theme.colors.border}`,
-              "align-items": "center",
-            })}>
-              <span style={{ "font-weight": "600", "font-size": "14px" }}>
+        <div class="absolute inset-0 bg-black/70 flex items-center justify-center z-[100]">
+          <div class="flex flex-col w-[500px] max-h-[80%] bg-bg rounded-[var(--radius)] border border-border overflow-hidden">
+            <div class="flex flex-row justify-between p-[var(--spacing-md)] border-b border-border items-center">
+              <span class="font-semibold text-sm">
                 {isInserting() ? "New Document" : `Edit: ${selectedDoc()?.id}`}
               </span>
               <Button theme={theme} size="sm" onClick={cancelEdit}>×</Button>
             </div>
-            <div style={css(flex.col, { padding: theme.sizing.spacing.md, gap: theme.sizing.spacing.md })}>
+            <div class="flex flex-col p-[var(--spacing-md)] gap-[var(--spacing-md)]">
               <Show when={editError()}>
-                <div style={{ color: theme.colors.error, background: `${theme.colors.error}15`, padding: theme.sizing.spacing.sm, "border-radius": theme.sizing.borderRadius, "font-size": "12px" }}>
+                <div class="text-error bg-error/10 p-[var(--spacing-sm)] rounded-[var(--radius)] text-xs">
                   {editError()}
                 </div>
               </Show>
@@ -671,10 +489,8 @@ export function DocumentsPanel(props: DocumentsPanelProps) {
                 height="300px"
                 placeholder="Enter document JSON..."
               />
-              <div style={css(flex.row, { gap: theme.sizing.spacing.sm, "justify-content": "flex-end" })}>
-                <Button theme={theme} onClick={cancelEdit}>
-                  Cancel
-                </Button>
+              <div class="flex flex-row gap-[var(--spacing-sm)] justify-end">
+                <Button theme={theme} onClick={cancelEdit}>Cancel</Button>
                 <Button theme={theme} variant="primary" onClick={saveDocument} disabled={isSaving()}>
                   {isSaving() ? "Saving..." : isInserting() ? "Create" : "Save"}
                 </Button>

@@ -1,5 +1,4 @@
-import { For, Show, createSignal, createMemo, type JSX } from "solid-js";
-import { css, scrollable } from "../../styles/css.js";
+import { For, Show, createSignal, createMemo } from "solid-js";
 import type { Theme } from "../../styles/theme.js";
 
 export interface JsonViewerProps {
@@ -14,17 +13,10 @@ type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string
 export function JsonViewer(props: JsonViewerProps) {
   return (
     <div
-      style={css(scrollable, {
-        "font-family": props.theme.fonts.mono,
-        "font-size": "12px",
-        "line-height": "1.6",
-        padding: props.theme.sizing.spacing.md,
-        background: props.theme.colors.bg,
-        "max-height": props.maxHeight,
-      })}
+      class="overflow-auto font-mono text-xs leading-relaxed p-[var(--spacing-md)] bg-bg"
+      style={props.maxHeight ? { "max-height": props.maxHeight } : undefined}
     >
       <JsonNode
-        theme={props.theme}
         value={props.data as JsonValue}
         depth={0}
         initialCollapsed={props.collapsed ?? false}
@@ -34,7 +26,6 @@ export function JsonViewer(props: JsonViewerProps) {
 }
 
 interface JsonNodeProps {
-  theme: Theme;
   value: JsonValue;
   depth: number;
   initialCollapsed: boolean;
@@ -43,64 +34,20 @@ interface JsonNodeProps {
 }
 
 function JsonNode(props: JsonNodeProps) {
-  const { theme } = props;
   const [collapsed, setCollapsed] = createSignal(props.initialCollapsed && props.depth > 0);
 
-  const _indent = () => props.depth * 16;
-
-  const keyStyle: JSX.CSSProperties = {
-    color: theme.colors.accent,
-  };
-
-  const stringStyle: JSX.CSSProperties = {
-    color: theme.colors.success,
-  };
-
-  const numberStyle: JSX.CSSProperties = {
-    color: theme.colors.warning,
-  };
-
-  const booleanStyle: JSX.CSSProperties = {
-    color: theme.colors.error,
-  };
-
-  const nullStyle: JSX.CSSProperties = {
-    color: theme.colors.textMuted,
-    "font-style": "italic",
-  };
-
-  const punctuationStyle: JSX.CSSProperties = {
-    color: theme.colors.textSecondary,
-  };
-
-  const toggleStyle: JSX.CSSProperties = {
-    color: theme.colors.textMuted,
-    cursor: "pointer",
-    "user-select": "none",
-    "margin-right": "4px",
-    "font-size": "10px",
-    width: "12px",
-    display: "inline-block",
-    "text-align": "center",
-  };
-
-  const lineStyle = (depth: number): JSX.CSSProperties => ({
-    "padding-left": `${depth * 16}px`,
-    "white-space": "pre",
-  });
-
-  const renderPrimitive = (value: string | number | boolean | null): JSX.Element => {
+  const renderPrimitive = (value: string | number | boolean | null) => {
     if (value === null) {
-      return <span style={nullStyle}>null</span>;
+      return <span class="text-text-muted italic">null</span>;
     }
     if (typeof value === "string") {
-      return <span style={stringStyle}>"{escapeString(value)}"</span>;
+      return <span class="text-success">"{escapeString(value)}"</span>;
     }
     if (typeof value === "number") {
-      return <span style={numberStyle}>{value}</span>;
+      return <span class="text-warning">{value}</span>;
     }
     if (typeof value === "boolean") {
-      return <span style={booleanStyle}>{value ? "true" : "false"}</span>;
+      return <span class="text-error">{value ? "true" : "false"}</span>;
     }
     return <span>{String(value)}</span>;
   };
@@ -114,13 +61,13 @@ function JsonNode(props: JsonNodeProps) {
       .replace(/\t/g, "\\t");
   };
 
-  const comma = () => (props.isLast === false ? <span style={punctuationStyle}>,</span> : null);
+  const comma = () => (props.isLast === false ? <span class="text-text-secondary">,</span> : null);
 
   const keyPrefix = () =>
     props.keyName !== undefined ? (
       <>
-        <span style={keyStyle}>"{props.keyName}"</span>
-        <span style={punctuationStyle}>: </span>
+        <span class="text-accent">"{props.keyName}"</span>
+        <span class="text-text-secondary">: </span>
       </>
     ) : null;
 
@@ -140,7 +87,7 @@ function JsonNode(props: JsonNodeProps) {
     <Show
       when={!isPrimitive()}
       fallback={
-        <div style={lineStyle(props.depth)}>
+        <div class="whitespace-pre" style={{ "padding-left": `${props.depth * 16}px` }}>
           {keyPrefix()}
           {renderPrimitive(props.value as string | number | boolean | null)}
           {comma()}
@@ -150,9 +97,9 @@ function JsonNode(props: JsonNodeProps) {
       <Show
         when={!isEmpty()}
         fallback={
-          <div style={lineStyle(props.depth)}>
+          <div class="whitespace-pre" style={{ "padding-left": `${props.depth * 16}px` }}>
             {keyPrefix()}
-            <span style={punctuationStyle}>
+            <span class="text-text-secondary">
               {openBracket()}
               {closeBracket()}
             </span>
@@ -160,16 +107,19 @@ function JsonNode(props: JsonNodeProps) {
           </div>
         }
       >
-        <div style={lineStyle(props.depth)}>
-          <span style={toggleStyle} onClick={() => setCollapsed(!collapsed())}>
+        <div class="whitespace-pre" style={{ "padding-left": `${props.depth * 16}px` }}>
+          <span
+            class="text-text-muted cursor-pointer select-none mr-1 text-[10px] w-3 inline-block text-center"
+            onClick={() => setCollapsed(!collapsed())}
+          >
             {collapsed() ? "▶" : "▼"}
           </span>
           {keyPrefix()}
-          <span style={punctuationStyle}>{openBracket()}</span>
+          <span class="text-text-secondary">{openBracket()}</span>
           <Show when={collapsed()}>
-            <span style={punctuationStyle}>
+            <span class="text-text-secondary">
               {" "}
-              <span style={{ color: theme.colors.textMuted }}>
+              <span class="text-text-muted">
                 {entries().length} {isArray() ? "items" : "keys"}
               </span>{" "}
               {closeBracket()}
@@ -181,7 +131,6 @@ function JsonNode(props: JsonNodeProps) {
           <For each={entries()}>
             {([key, value], index) => (
               <JsonNode
-                theme={theme}
                 value={value}
                 depth={props.depth + 1}
                 initialCollapsed={props.initialCollapsed}
@@ -190,9 +139,9 @@ function JsonNode(props: JsonNodeProps) {
               />
             )}
           </For>
-          <div style={lineStyle(props.depth)}>
-            <span style={{ width: "16px", display: "inline-block" }} />
-            <span style={punctuationStyle}>{closeBracket()}</span>
+          <div class="whitespace-pre" style={{ "padding-left": `${props.depth * 16}px` }}>
+            <span class="w-4 inline-block" />
+            <span class="text-text-secondary">{closeBracket()}</span>
             {comma()}
           </div>
         </Show>

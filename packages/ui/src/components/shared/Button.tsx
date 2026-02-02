@@ -1,5 +1,4 @@
 import type { JSX } from "solid-js";
-import { css } from "../../styles/css.js";
 import type { Theme } from "../../styles/theme.js";
 
 export interface ButtonProps {
@@ -9,67 +8,48 @@ export interface ButtonProps {
   variant?: "primary" | "secondary" | "danger";
   size?: "sm" | "md";
   disabled?: boolean;
+  class?: string;
 }
+
+const baseClasses =
+  "rounded-[var(--radius)] font-medium whitespace-nowrap transition-all duration-150 ease-out";
+
+const sizeClasses = {
+  sm: "px-[var(--spacing-sm)] py-[var(--spacing-xs)] text-[11px]",
+  md: "px-[var(--spacing-md)] py-[var(--spacing-sm)] text-xs",
+};
+
+const variantClasses = {
+  primary:
+    "bg-accent text-white border border-transparent hover:opacity-80",
+  secondary:
+    "bg-bg-secondary text-text border border-border hover:opacity-80",
+  danger:
+    "bg-error text-white border border-transparent hover:opacity-80",
+};
+
+const disabledClasses = "opacity-60 cursor-not-allowed";
 
 export function Button(props: ButtonProps) {
   const variant = () => props.variant ?? "secondary";
   const size = () => props.size ?? "md";
-  const { theme } = props;
 
-  const getBackground = (): string => {
-    if (props.disabled) return theme.colors.bgSecondary;
-    switch (variant()) {
-      case "primary":
-        return theme.colors.accent;
-      case "danger":
-        return theme.colors.error;
-      default:
-        return theme.colors.bgSecondary;
-    }
+  const classes = () => {
+    const parts = [
+      baseClasses,
+      sizeClasses[size()],
+      variantClasses[variant()],
+      props.disabled ? disabledClasses : "cursor-pointer",
+      props.class,
+    ];
+    return parts.filter(Boolean).join(" ");
   };
-
-  const getColor = (): string => {
-    if (props.disabled) return theme.colors.textMuted;
-    switch (variant()) {
-      case "primary":
-      case "danger":
-        return "#fff";
-      default:
-        return theme.colors.text;
-    }
-  };
-
-  const buttonStyle = (): JSX.CSSProperties =>
-    css({
-      padding:
-        size() === "sm"
-          ? `${theme.sizing.spacing.xs} ${theme.sizing.spacing.sm}`
-          : `${theme.sizing.spacing.sm} ${theme.sizing.spacing.md}`,
-      background: getBackground(),
-      color: getColor(),
-      border: `1px solid ${variant() === "secondary" ? theme.colors.border : "transparent"}`,
-      "border-radius": theme.sizing.borderRadius,
-      "font-size": size() === "sm" ? "11px" : "12px",
-      "font-weight": "500",
-      cursor: props.disabled ? "not-allowed" : "pointer",
-      transition: "all 0.15s ease",
-      opacity: props.disabled ? 0.6 : 1,
-      "white-space": "nowrap",
-    });
 
   return (
     <button
-      style={buttonStyle()}
+      class={classes()}
       onClick={props.onClick}
       disabled={props.disabled}
-      onMouseEnter={(e) => {
-        if (!props.disabled) {
-          e.currentTarget.style.opacity = "0.8";
-        }
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.opacity = props.disabled ? "0.6" : "1";
-      }}
     >
       {props.children}
     </button>

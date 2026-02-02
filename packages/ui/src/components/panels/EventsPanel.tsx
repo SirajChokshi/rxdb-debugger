@@ -1,6 +1,5 @@
-import { createEffect, createSignal, For, Show, type JSX } from "solid-js";
+import { createEffect, createSignal, For, Show } from "solid-js";
 import type { RxdbDebugger, ChangeEvent, OperationType } from "@rxdb-debugger/core";
-import { css, ellipsis, flex, scrollable } from "../../styles/css.js";
 import type { Theme } from "../../styles/theme.js";
 import { Button } from "../shared/Button.js";
 import { JsonDiff } from "../shared/JsonDiff.js";
@@ -14,6 +13,12 @@ export interface EventsPanelProps {
   debugger: RxdbDebugger;
 }
 
+const opBadgeClasses = {
+  INSERT: "bg-success/30 text-success",
+  UPDATE: "bg-warning/30 text-warning",
+  DELETE: "bg-error/30 text-error",
+};
+
 export function EventsPanel(props: EventsPanelProps) {
   const [events, setEvents] = createSignal<ChangeEvent[]>([]);
   const [isPaused, setIsPaused] = createSignal(false);
@@ -23,6 +28,8 @@ export function EventsPanel(props: EventsPanelProps) {
   const [collectionFilter, setCollectionFilter] = createSignal<string | null>(null);
   const [operationFilters, setOperationFilters] = createSignal<Set<OperationType>>(new Set());
   const [collectionNames, setCollectionNames] = createSignal<string[]>([]);
+
+  const { theme } = props;
 
   createEffect(() => {
     props.debugger.catalog.collectionNames().get()
@@ -91,163 +98,36 @@ export function EventsPanel(props: EventsPanelProps) {
     });
   };
 
-  const { theme } = props;
-
-  const containerStyle = css(flex.row, {
-    height: "100%",
-    overflow: "hidden",
-  });
-
-  const listStyle = css(flex.col, {
-    flex: "1",
-    overflow: "hidden",
-  });
-
-  const toolbarStyle = css(flex.row, {
-    padding: theme.sizing.spacing.md,
-    gap: theme.sizing.spacing.sm,
-    "border-bottom": `1px solid ${theme.colors.border}`,
-    "align-items": "center",
-    "flex-shrink": "0",
-  });
-
-  const filterInputStyle = css({
-    flex: "1",
-    "min-width": "120px",
-    padding: `${theme.sizing.spacing.xs} ${theme.sizing.spacing.sm}`,
-    background: theme.colors.bgSecondary,
-    color: theme.colors.text,
-    border: `1px solid ${theme.colors.border}`,
-    "border-radius": theme.sizing.borderRadius,
-    "font-size": "12px",
-    outline: "none",
-  });
-
-  const selectStyle = css({
-    padding: `${theme.sizing.spacing.xs} ${theme.sizing.spacing.sm}`,
-    background: theme.colors.bgSecondary,
-    color: theme.colors.text,
-    border: `1px solid ${theme.colors.border}`,
-    "border-radius": theme.sizing.borderRadius,
-    "font-size": "12px",
-    outline: "none",
-    cursor: "pointer",
-  });
-
-  const opToggleStyle = (isActive: boolean, op: OperationType): JSX.CSSProperties => {
-    const colors = {
-      INSERT: theme.colors.success,
-      UPDATE: theme.colors.warning,
-      DELETE: theme.colors.error,
-    };
-    const color = colors[op];
-    return css({
-      padding: `2px ${theme.sizing.spacing.xs}`,
-      "border-radius": "3px",
-      "font-size": "10px",
-      "font-weight": "600",
-      border: "none",
-      cursor: "pointer",
-      background: isActive ? `${color}30` : theme.colors.bgSecondary,
-      color: isActive ? color : theme.colors.textMuted,
-      opacity: isActive ? "1" : "0.6",
-    });
-  };
-
-  const filterGroupStyle = css(flex.row, {
-    gap: "4px",
-    "align-items": "center",
-  });
-
-  const eventListStyle = css(scrollable, {
-    flex: "1",
-  });
-
-  const eventRowStyle = (isSelected: boolean): JSX.CSSProperties =>
-    css(flex.row, {
-      padding: `${theme.sizing.spacing.sm} ${theme.sizing.spacing.md}`,
-      "border-bottom": `1px solid ${theme.colors.border}`,
-      cursor: "pointer",
-      background: isSelected ? theme.colors.bgSelected : "transparent",
-      gap: theme.sizing.spacing.sm,
-      "align-items": "center",
-    });
-
-  const operationBadgeStyle = (op: string): JSX.CSSProperties => {
-    const colors = {
-      INSERT: theme.colors.success,
-      UPDATE: theme.colors.warning,
-      DELETE: theme.colors.error,
-    };
-    return css({
-      padding: `2px ${theme.sizing.spacing.xs}`,
-      "border-radius": "3px",
-      "font-size": "10px",
-      "font-weight": "600",
-      background: `${colors[op as keyof typeof colors] ?? theme.colors.textMuted}30`,
-      color: colors[op as keyof typeof colors] ?? theme.colors.textMuted,
-    });
-  };
-
-  const collectionStyle = css(ellipsis, {
-    width: "100px",
-    "flex-shrink": "0",
-    "font-size": "12px",
-    color: theme.colors.accent,
-  });
-
-  const docIdStyle = css(ellipsis, {
-    flex: "1",
-    "font-size": "12px",
-    "font-family": theme.fonts.mono,
-    color: theme.colors.textSecondary,
-  });
-
-  const timeStyle = css({
-    "font-size": "10px",
-    color: theme.colors.textMuted,
-    "font-family": theme.fonts.mono,
-  });
-
-  const detailStyle = css(flex.col, {
-    width: "350px",
-    "flex-shrink": "0",
-    "border-left": `1px solid ${theme.colors.border}`,
-    overflow: "hidden",
-  });
-
-  const detailHeaderStyle = css(flex.row, flex.between, {
-    padding: theme.sizing.spacing.md,
-    "border-bottom": `1px solid ${theme.colors.border}`,
-    "align-items": "center",
-  });
-
-  const detailContentStyle = css(scrollable, {
-    flex: "1",
-    padding: theme.sizing.spacing.md,
-    "font-family": theme.fonts.mono,
-    "font-size": "11px",
-    "white-space": "pre-wrap",
-    "word-break": "break-all",
-  });
-
   const formatTime = (timestamp: number): string => {
     const date = new Date(timestamp);
     return date.toLocaleTimeString();
   };
 
+  const opToggleClasses = (isActive: boolean, op: OperationType) => {
+    const base = "px-[var(--spacing-xs)] py-0.5 rounded-sm text-[10px] font-semibold border-none cursor-pointer";
+    if (!isActive) {
+      return `${base} bg-bg-secondary text-text-muted opacity-60`;
+    }
+    const activeColors = {
+      INSERT: "bg-success/30 text-success",
+      UPDATE: "bg-warning/30 text-warning",
+      DELETE: "bg-error/30 text-error",
+    };
+    return `${base} ${activeColors[op]}`;
+  };
+
   return (
-    <div style={containerStyle}>
-      <div style={listStyle}>
-        <div style={toolbarStyle}>
+    <div class="flex flex-row h-full overflow-hidden">
+      <div class="flex flex-col flex-1 overflow-hidden">
+        <div class="flex flex-row p-[var(--spacing-md)] gap-[var(--spacing-sm)] border-b border-border items-center shrink-0">
           <input
-            style={filterInputStyle}
+            class="flex-1 min-w-[120px] px-[var(--spacing-sm)] py-[var(--spacing-xs)] bg-bg-secondary text-text border border-border rounded-[var(--radius)] text-xs outline-none"
             placeholder="Filter events..."
             value={filter()}
             onInput={(e) => setFilter(e.currentTarget.value)}
           />
           <select
-            style={selectStyle}
+            class="px-[var(--spacing-sm)] py-[var(--spacing-xs)] bg-bg-secondary text-text border border-border rounded-[var(--radius)] text-xs outline-none cursor-pointer"
             value={collectionFilter() ?? ""}
             onChange={(e) => setCollectionFilter(e.currentTarget.value || null)}
           >
@@ -256,11 +136,11 @@ export function EventsPanel(props: EventsPanelProps) {
               {(name) => <option value={name}>{name}</option>}
             </For>
           </select>
-          <div style={filterGroupStyle}>
+          <div class="flex flex-row gap-1 items-center">
             <For each={OPERATION_TYPES}>
               {(op) => (
                 <button
-                  style={opToggleStyle(operationFilters().has(op), op)}
+                  class={opToggleClasses(operationFilters().has(op), op)}
                   onClick={() => toggleOperationFilter(op)}
                   title={`Filter by ${op}`}
                 >
@@ -275,43 +155,34 @@ export function EventsPanel(props: EventsPanelProps) {
           <Button theme={theme} onClick={clearEvents}>
             Clear
           </Button>
-          <span style={{ "font-size": "11px", color: theme.colors.textMuted }}>
-            {filteredEvents().length} events
-          </span>
+          <span class="text-[11px] text-text-muted">{filteredEvents().length} events</span>
         </div>
 
-        <div style={eventListStyle}>
+        <div class="flex-1 overflow-auto">
           <Show when={error()}>
-            <div style={{ padding: theme.sizing.spacing.md, margin: theme.sizing.spacing.md, color: theme.colors.error, background: `${theme.colors.error}15`, "border-radius": theme.sizing.borderRadius }}>
+            <div class="p-[var(--spacing-md)] m-[var(--spacing-md)] text-error bg-error/10 rounded-[var(--radius)]">
               {error()}
             </div>
           </Show>
           <For each={filteredEvents()} fallback={
-            <div style={{ padding: theme.sizing.spacing.xl, "text-align": "center", color: theme.colors.textMuted }}>
+            <div class="p-[var(--spacing-xl)] text-center text-text-muted">
               No events yet. Changes to documents will appear here.
             </div>
           }>
             {(event) => {
               const isSelected = () => selectedEvent()?.id === event.id;
+              const rowClasses = () => {
+                const base = "flex flex-row px-[var(--spacing-md)] py-[var(--spacing-sm)] border-b border-border cursor-pointer gap-[var(--spacing-sm)] items-center";
+                return isSelected() ? `${base} bg-bg-selected` : `${base} hover:bg-bg-hover`;
+              };
               return (
-                <div
-                  style={eventRowStyle(isSelected())}
-                  onClick={() => setSelectedEvent(event)}
-                  onMouseEnter={(e) => {
-                    if (!isSelected()) {
-                      e.currentTarget.style.background = theme.colors.bgHover;
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isSelected()) {
-                      e.currentTarget.style.background = "transparent";
-                    }
-                  }}
-                >
-                  <span style={operationBadgeStyle(event.operation)}>{event.operation}</span>
-                  <span style={collectionStyle}>{event.collection}</span>
-                  <span style={docIdStyle}>{event.documentId}</span>
-                  <span style={timeStyle}>{formatTime(event.timestamp)}</span>
+                <div class={rowClasses()} onClick={() => setSelectedEvent(event)}>
+                  <span class={`px-[var(--spacing-xs)] py-0.5 rounded-sm text-[10px] font-semibold ${opBadgeClasses[event.operation]}`}>
+                    {event.operation}
+                  </span>
+                  <span class="w-[100px] shrink-0 text-xs text-accent truncate">{event.collection}</span>
+                  <span class="flex-1 text-xs font-mono text-text-secondary truncate">{event.documentId}</span>
+                  <span class="text-[10px] text-text-muted font-mono">{formatTime(event.timestamp)}</span>
                 </div>
               );
             }}
@@ -321,31 +192,31 @@ export function EventsPanel(props: EventsPanelProps) {
 
       <Show when={selectedEvent()}>
         {(event) => (
-          <div style={detailStyle}>
-            <div style={detailHeaderStyle}>
-              <span style={{ "font-weight": "600", "font-size": "12px" }}>
-                Event Details
-              </span>
+          <div class="flex flex-col w-[350px] shrink-0 border-l border-border overflow-hidden">
+            <div class="flex flex-row justify-between p-[var(--spacing-md)] border-b border-border items-center">
+              <span class="font-semibold text-xs">Event Details</span>
               <Button theme={theme} size="sm" onClick={() => setSelectedEvent(null)}>
                 ×
               </Button>
             </div>
-            <div style={detailContentStyle}>
-              <div style={{ "margin-bottom": theme.sizing.spacing.md }}>
-                <div style={{ color: theme.colors.textMuted, "margin-bottom": "4px" }}>Operation</div>
-                <span style={operationBadgeStyle(event().operation)}>{event().operation}</span>
+            <div class="flex-1 overflow-auto p-[var(--spacing-md)] font-mono text-[11px] whitespace-pre-wrap break-all">
+              <div class="block mb-[var(--spacing-md)]">
+                <div class="text-text-muted mb-1">Operation</div>
+                <span class={`px-[var(--spacing-xs)] py-0.5 rounded-sm text-[10px] font-semibold ${opBadgeClasses[event().operation]}`}>
+                  {event().operation}
+                </span>
               </div>
-              <div style={{ "margin-bottom": theme.sizing.spacing.md }}>
-                <div style={{ color: theme.colors.textMuted, "margin-bottom": "4px" }}>Collection</div>
-                <div style={{ color: theme.colors.accent }}>{event().collection}</div>
+              <div class="block mb-[var(--spacing-md)]">
+                <div class="text-text-muted mb-1">Collection</div>
+                <div class="text-accent">{event().collection}</div>
               </div>
-              <div style={{ "margin-bottom": theme.sizing.spacing.md }}>
-                <div style={{ color: theme.colors.textMuted, "margin-bottom": "4px" }}>Document ID</div>
+              <div class="block mb-[var(--spacing-md)]">
+                <div class="text-text-muted mb-1">Document ID</div>
                 <div>{event().documentId}</div>
               </div>
               <Show when={event().operation === "UPDATE" && event().previousData && event().data}>
-                <div style={{ "margin-bottom": theme.sizing.spacing.md }}>
-                  <div style={{ color: theme.colors.textMuted, "margin-bottom": "4px" }}>Changes</div>
+                <div class="block mb-[var(--spacing-md)]">
+                  <div class="text-text-muted mb-1">Changes</div>
                   {(() => {
                     const docA = { id: "prev", data: event().previousData as Record<string, unknown> };
                     const docB = { id: "curr", data: event().data as Record<string, unknown> };
@@ -355,14 +226,14 @@ export function EventsPanel(props: EventsPanelProps) {
                 </div>
               </Show>
               <Show when={event().operation !== "UPDATE" && event().data}>
-                <div style={{ "margin-bottom": theme.sizing.spacing.md }}>
-                  <div style={{ color: theme.colors.textMuted, "margin-bottom": "4px" }}>Data</div>
+                <div class="block mb-[var(--spacing-md)]">
+                  <div class="text-text-muted mb-1">Data</div>
                   <JsonViewer theme={theme} data={event().data} collapsed={false} />
                 </div>
               </Show>
               <Show when={event().operation !== "UPDATE" && event().previousData}>
                 <div>
-                  <div style={{ color: theme.colors.textMuted, "margin-bottom": "4px" }}>Previous Data</div>
+                  <div class="text-text-muted mb-1">Previous Data</div>
                   <JsonViewer theme={theme} data={event().previousData} collapsed={false} />
                 </div>
               </Show>

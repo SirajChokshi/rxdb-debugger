@@ -80,12 +80,6 @@ export function Debugger(props: DebuggerProps): JSX.Element {
       border: `1px solid ${theme().colors.border}`,
     });
 
-  const contentStyle = css(flex.col, {
-    flex: "1",
-    "min-height": "0",
-    overflow: "hidden",
-  });
-
   return (
     <div style={containerStyle()}>
       <Tabs
@@ -94,7 +88,7 @@ export function Debugger(props: DebuggerProps): JSX.Element {
         activeTab={activeTab()}
         onTabChange={(id) => setActiveTab(id as PanelId)}
       />
-      <div style={contentStyle}>
+      <div class="flex flex-col flex-1 min-h-0 overflow-hidden">
         <Switch>
           <Match when={activeTab() === "collections"}>
             <CollectionsPanel theme={theme()} debugger={props.debugger} />

@@ -9,12 +9,14 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    }
+    },
+    "./styles.css": "./dist/styles.css"
   },
   "files": ["dist"],
-  "sideEffects": false,
+  "sideEffects": ["./dist/styles.css"],
   "scripts": {
-    "build": "tsdown",
+    "build": "tsdown && postcss src/styles/tailwind.css -o dist/styles.css",
+    "build:css": "postcss src/styles/tailwind.css -o dist/styles.css",
     "dev": "tsdown --watch",
     "typecheck": "tsc --noEmit"
   },
@@ -24,9 +26,13 @@
   },
   "devDependencies": {
     "@rxdb-debugger/core": "workspace:*",
+    "@tailwindcss/postcss": "^4.1.18",
+    "postcss": "^8.5.6",
+    "postcss-cli": "^11.0.1",
     "rolldown-plugin-solid": "^0.2.0",
     "rxdb": "16.21.1",
     "solid-js": "^1.9.0",
+    "tailwindcss": "^4.1.18",
     "tsdown": "^0.20.1",
     "typescript": "^5.7.3"
   }

@@ -1,5 +1,4 @@
 import { For, Show, type JSX } from "solid-js";
-import { css, ellipsis, scrollable } from "../../styles/css.js";
 import type { Theme } from "../../styles/theme.js";
 
 export interface TableColumn<T> {
@@ -20,67 +19,27 @@ export interface TableProps<T> {
 }
 
 export function Table<T>(props: TableProps<T>) {
-  const { theme } = props;
-
-  const containerStyle = css(scrollable, {
-    flex: "1",
-    "min-height": "0",
-  });
-
-  const tableStyle = css({
-    width: "100%",
-    "border-collapse": "collapse",
-    "table-layout": "fixed",
-  });
-
-  const headerRowStyle = css({
-    position: "sticky",
-    top: "0",
-    background: theme.colors.bgSecondary,
-    "z-index": "1",
-  });
-
-  const headerCellStyle = (width?: string): JSX.CSSProperties =>
-    css(ellipsis, {
-      padding: `${theme.sizing.spacing.sm} ${theme.sizing.spacing.md}`,
-      "text-align": "left",
-      "font-size": "11px",
-      "font-weight": "600",
-      "text-transform": "uppercase",
-      "letter-spacing": "0.5px",
-      color: theme.colors.textMuted,
-      "border-bottom": `1px solid ${theme.colors.border}`,
-      width: width ?? "auto",
-    });
-
-  const rowStyle = (isSelected: boolean): JSX.CSSProperties =>
-    css({
-      cursor: props.onRowClick ? "pointer" : "default",
-      background: isSelected ? theme.colors.bgSelected : "transparent",
-      transition: "background 0.1s ease",
-    });
-
-  const cellStyle = css(ellipsis, {
-    padding: `${theme.sizing.spacing.sm} ${theme.sizing.spacing.md}`,
-    "font-size": "12px",
-    "border-bottom": `1px solid ${theme.colors.border}`,
-    color: theme.colors.text,
-  });
-
-  const emptyStyle = css({
-    padding: theme.sizing.spacing.xl,
-    "text-align": "center",
-    color: theme.colors.textMuted,
-    "font-size": "13px",
-  });
+  const rowClasses = (isSelected: boolean) => {
+    const base = "transition-colors duration-100";
+    const cursor = props.onRowClick ? "cursor-pointer" : "cursor-default";
+    const bg = isSelected ? "bg-bg-selected" : "bg-transparent hover:bg-bg-hover";
+    return `${base} ${cursor} ${bg}`;
+  };
 
   return (
-    <div style={containerStyle}>
-      <table style={tableStyle}>
+    <div class="flex-1 min-h-0 overflow-auto">
+      <table class="w-full border-collapse table-fixed">
         <thead>
-          <tr style={headerRowStyle}>
+          <tr class="sticky top-0 bg-bg-secondary z-[1]">
             <For each={props.columns}>
-              {(col) => <th style={headerCellStyle(col.width)}>{col.label}</th>}
+              {(col) => (
+                <th
+                  class="px-[var(--spacing-md)] py-[var(--spacing-sm)] text-left text-[11px] font-semibold uppercase tracking-wider text-text-muted border-b border-border truncate"
+                  style={col.width ? { width: col.width } : undefined}
+                >
+                  {col.label}
+                </th>
+              )}
             </For>
           </tr>
         </thead>
@@ -91,25 +50,19 @@ export function Table<T>(props: TableProps<T>) {
               const isSelected = () => props.selectedKey === key;
               return (
                 <tr
-                  style={rowStyle(isSelected())}
+                  class={rowClasses(isSelected())}
                   onClick={() => props.onRowClick?.(item)}
-                  onMouseEnter={(e) => {
-                    if (!isSelected() && props.onRowClick) {
-                      e.currentTarget.style.background = theme.colors.bgHover;
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isSelected()) {
-                      e.currentTarget.style.background = "transparent";
-                    }
-                  }}
                 >
                   <For each={props.columns}>
                     {(col) => {
                       const value = col.render
                         ? col.render(item, index())
                         : String((item as Record<string, unknown>)[col.key] ?? "");
-                      return <td style={cellStyle}>{value}</td>;
+                      return (
+                        <td class="px-[var(--spacing-md)] py-[var(--spacing-sm)] text-xs border-b border-border text-text truncate">
+                          {value}
+                        </td>
+                      );
                     }}
                   </For>
                 </tr>
@@ -119,7 +72,9 @@ export function Table<T>(props: TableProps<T>) {
         </tbody>
       </table>
       <Show when={props.data.length === 0}>
-        <div style={emptyStyle}>{props.emptyMessage ?? "No data"}</div>
+        <div class="p-[var(--spacing-xl)] text-center text-text-muted text-[13px]">
+          {props.emptyMessage ?? "No data"}
+        </div>
       </Show>
     </div>
   );
