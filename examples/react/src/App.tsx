@@ -601,14 +601,16 @@ function HomeView({ artists, albums, songs, onPlaySong, onSelectArtist }: {
 
   if (artists.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-center px-8">
-        <div className="w-24 h-24 bg-neutral-800 rounded-full flex items-center justify-center mb-6">
-          <span className="text-4xl">🎵</span>
+      <div className="flex items-center justify-center h-full px-8">
+        <div className="text-center w-96">
+          <div className="w-24 h-24 bg-neutral-800 rounded-full flex items-center justify-center mb-6 mx-auto">
+            <span className="text-4xl">🎵</span>
+          </div>
+          <h1 className="text-3xl font-bold mb-2">Welcome to RxTunes</h1>
+          <p className="text-neutral-400 text-lg">
+            Your music library is empty. Load the demo data to explore artists, albums, and songs.
+          </p>
         </div>
-        <h1 className="text-3xl font-bold mb-2">Welcome to RxTunes</h1>
-        <p className="text-neutral-400 mb-6 max-w-md">
-          Your music library is empty. Load the demo data to explore artists, albums, and songs.
-        </p>
       </div>
     );
   }
