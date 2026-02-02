@@ -10,8 +10,23 @@ type State =
   | { status: "error"; message: string }
   | { status: "connected" };
 
+/**
+ * Detects the DevTools theme using chrome.devtools.panels.themeName.
+ * Returns "dark" or "light" based on the current DevTools theme.
+ */
+function getDevToolsTheme(): "dark" | "light" {
+  try {
+    // chrome.devtools.panels.themeName returns "dark" or "default"
+    const themeName = chrome.devtools?.panels?.themeName;
+    return themeName === "dark" ? "dark" : "light";
+  } catch {
+    // Fallback to checking prefers-color-scheme if DevTools API unavailable
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  }
+}
+
 function getStyles() {
-  const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  const isDark = getDevToolsTheme() === "dark";
 
   return {
     container: `
@@ -122,10 +137,12 @@ function Panel() {
       setState({ status: "connected" });
 
       if (containerRef) {
+        // Use DevTools theme API for extension panels
+        const theme = getDevToolsTheme();
         debuggerCleanup = mountDebugger({
           container: containerRef,
           db: remoteDb,
-          theme: "auto",
+          theme,
         });
       }
     } catch (err) {
