@@ -602,7 +602,7 @@ function HomeView({ artists, albums, songs, onPlaySong, onSelectArtist }: {
   if (artists.length === 0) {
     return (
       <div className="flex items-center justify-center h-full px-8">
-        <div className="text-center" style={{ maxWidth: '400px', width: '100%' }}>
+        <div className="text-center w-96">
           <div className="w-24 h-24 bg-neutral-800 rounded-full flex items-center justify-center mb-6 mx-auto">
             <span className="text-4xl">🎵</span>
           </div>
