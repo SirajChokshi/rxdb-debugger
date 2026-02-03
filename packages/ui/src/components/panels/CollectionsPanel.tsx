@@ -200,12 +200,12 @@ export function CollectionsPanel(props: CollectionsPanelProps) {
             onInput={(e) => setSearchQuery(e.currentTarget.value)}
           />
         </div>
-        <div class="flex-1 overflow-auto p-[var(--spacing-xs)]">
+        <div class="flex-1 overflow-auto">
           <Show when={isLoading()}>
             <div class="p-[var(--spacing-md)] text-text-muted">Loading...</div>
           </Show>
           <Show when={error()}>
-            <div class="p-[var(--spacing-md)] text-error bg-error/10 rounded-[var(--radius)]">{error()}</div>
+            <div class="p-[var(--spacing-md)] text-error bg-error/10">{error()}</div>
           </Show>
           <Show when={!isLoading() && !error() && collections().length === 0}>
             <div class="p-[var(--spacing-md)] text-text-muted text-center">No collections found</div>
@@ -217,7 +217,7 @@ export function CollectionsPanel(props: CollectionsPanelProps) {
             {(col) => {
               const isSelected = () => selectedCollection() === col.name;
               const itemClasses = () => {
-                const base = "flex flex-row px-[var(--spacing-md)] py-[var(--spacing-sm)] rounded-[var(--radius)] cursor-pointer mb-0.5";
+                const base = "flex flex-row px-[var(--spacing-md)] py-[var(--spacing-sm)] border-b border-border cursor-pointer";
                 return isSelected() ? `${base} bg-bg-selected` : `${base} hover:bg-bg-hover`;
               };
               return (
