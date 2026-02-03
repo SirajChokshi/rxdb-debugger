@@ -116,6 +116,7 @@ export function Resizable(props: ResizableProps) {
 
   const handleStyle = (): JSX.CSSProperties => {
     const cursor = isHorizontal() ? "col-resize" : "row-resize";
+    const halfHandle = HANDLE_HIT_AREA / 2;
 
     if (sizeFromEnd()) {
       if (isHorizontal()) {
@@ -123,7 +124,7 @@ export function Resizable(props: ResizableProps) {
           position: "absolute",
           top: 0,
           bottom: 0,
-          right: `${size() - HANDLE_HIT_AREA / 2}px`,
+          right: `${size() - halfHandle}px`,
           width: `${HANDLE_HIT_AREA}px`,
           cursor,
           "z-index": 10,
@@ -134,7 +135,7 @@ export function Resizable(props: ResizableProps) {
         position: "absolute",
         left: 0,
         right: 0,
-        bottom: `${size() - HANDLE_HIT_AREA / 2}px`,
+        bottom: `${size() - halfHandle}px`,
         height: `${HANDLE_HIT_AREA}px`,
         cursor,
         "z-index": 10,
@@ -147,7 +148,7 @@ export function Resizable(props: ResizableProps) {
         position: "absolute",
         top: 0,
         bottom: 0,
-        left: `${size() - HANDLE_HIT_AREA / 2}px`,
+        left: `${size() - halfHandle}px`,
         width: `${HANDLE_HIT_AREA}px`,
         cursor,
         "z-index": 10,
@@ -158,7 +159,7 @@ export function Resizable(props: ResizableProps) {
       position: "absolute",
       left: 0,
       right: 0,
-      top: `${size() - HANDLE_HIT_AREA / 2}px`,
+      top: `${size() - halfHandle}px`,
       height: `${HANDLE_HIT_AREA}px`,
       cursor,
       "z-index": 10,
@@ -167,12 +168,14 @@ export function Resizable(props: ResizableProps) {
   };
 
   const borderStyle = (): JSX.CSSProperties => {
+    const halfHandle = HANDLE_HIT_AREA / 2;
+    
     if (isHorizontal()) {
       return {
         position: "absolute",
         top: 0,
         bottom: 0,
-        left: `${HANDLE_HIT_AREA / 2 - 0.5}px`,
+        left: `${halfHandle}px`,
         width: "1px",
         "background-color": "var(--border)",
         "pointer-events": "none",
@@ -182,7 +185,7 @@ export function Resizable(props: ResizableProps) {
       position: "absolute",
       left: 0,
       right: 0,
-      top: `${HANDLE_HIT_AREA / 2 - 0.5}px`,
+      top: `${halfHandle}px`,
       height: "1px",
       "background-color": "var(--border)",
       "pointer-events": "none",
