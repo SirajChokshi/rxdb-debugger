@@ -6,6 +6,7 @@ import { Button } from "../shared/Button.js";
 import { JsonDiff } from "../shared/JsonDiff.js";
 import { CodeEditor } from "../shared/CodeEditor.js";
 import { JsonViewer } from "../shared/JsonViewer.js";
+import { Resizable } from "../shared/Resizable.js";
 import { createObservableSignal } from "../../utils/observable.js";
 
 export interface DocumentsPanelProps {
@@ -298,12 +299,11 @@ export function DocumentsPanel(props: DocumentsPanelProps) {
     if (isMobile()) {
       return "flex flex-col absolute inset-0 bg-bg z-50";
     }
-    return "flex flex-col w-[400px] shrink-0 border-l border-border overflow-hidden";
+    return "flex flex-col h-full overflow-hidden";
   };
 
-  return (
-    <div class="flex flex-row h-full overflow-hidden relative">
-      <div class="flex flex-col flex-1 min-w-0 overflow-hidden">
+  const mainListContent = () => (
+    <div class="flex flex-col h-full min-w-0 overflow-hidden">
         <div class="flex flex-row p-[var(--spacing-md)] gap-[var(--spacing-sm)] border-b border-border items-center shrink-0">
           <select
             class="px-[var(--spacing-sm)] py-[var(--spacing-xs)] bg-bg-secondary text-text border border-border rounded-[var(--radius)] text-xs"
@@ -394,108 +394,142 @@ export function DocumentsPanel(props: DocumentsPanelProps) {
           </Show>
         </div>
       </div>
+    );
 
-      <Show when={selectedDoc() || diffResult()}>
-        <div class={detailClasses()}>
-          <div class="flex flex-row justify-between p-[var(--spacing-md)] border-b border-border items-center shrink-0">
-            <span class="font-semibold text-xs font-mono">
-              {diffResult() ? "Document Comparison" : selectedDoc()?.id}
+  const detailContent = () => (
+    <Show when={selectedDoc() || diffResult()}>
+      <div class={detailClasses()}>
+        <div class="flex flex-row justify-between p-[var(--spacing-md)] border-b border-border items-center shrink-0">
+          <span class="font-semibold text-xs font-mono">
+            {diffResult() ? "Document Comparison" : selectedDoc()?.id}
+          </span>
+          <div class="flex flex-row gap-[var(--spacing-xs)]">
+            <Show when={selectedDoc() && !diffResult()}>
+              <Button theme={theme} size="sm" onClick={loadHistory}>History</Button>
+            </Show>
+            <Show when={props.allowMutations && selectedDoc() && !diffResult()}>
+              <Button theme={theme} size="sm" onClick={startEditing}>Edit</Button>
+              <Button theme={theme} size="sm" variant="danger" onClick={deleteDocument}>Delete</Button>
+            </Show>
+            <Button theme={theme} size="sm" onClick={() => { setSelectedDoc(null); setCompareDoc(null); setDiffResult(null); setShowHistory(false); }}>
+              ×
+            </Button>
+          </div>
+        </div>
+        <Show when={showHistory()}>
+          <div class="flex-1 overflow-auto">
+            <div class="p-[var(--spacing-sm)] bg-bg-secondary text-[11px] flex justify-between items-center">
+              <span>Version History</span>
+              <Button theme={theme} size="sm" onClick={() => setShowHistory(false)}>Back</Button>
+            </div>
+            <div class="flex-1 overflow-auto">
+              <Show when={docHistory().length === 0}>
+                <div class="p-[var(--spacing-xl)] text-center text-text-muted">No history recorded for this document</div>
+              </Show>
+              <For each={docHistory()}>
+                {(version) => (
+                  <div
+                    class="flex flex-row p-[var(--spacing-sm)] border-b border-border cursor-pointer gap-[var(--spacing-sm)] items-center hover:bg-bg-hover"
+                    onClick={() => selectVersion(version)}
+                  >
+                    <span class={`px-[var(--spacing-xs)] py-0.5 rounded-sm text-[10px] font-semibold ${opBadgeClasses[version.operation]}`}>
+                      {version.operation}
+                    </span>
+                    <span class="text-[11px] text-text-muted font-mono">
+                      {new Date(version.timestamp).toLocaleString()}
+                    </span>
+                  </div>
+                )}
+              </For>
+            </div>
+          </div>
+        </Show>
+        <Show when={!showHistory()}>
+          <Show when={diffResult()} fallback={
+            <div class="flex-1 overflow-auto p-0">
+              <JsonViewer theme={theme} data={selectedDoc()?.data} collapsed={false} />
+            </div>
+          }>
+            {(diff) => (
+              <div class="flex-1 overflow-auto p-0">
+                <div class="p-[var(--spacing-sm)] bg-bg-secondary text-[11px]">
+                  <span class="text-accent">{selectedDoc()?.id}</span>
+                  {" vs "}
+                  <span class="text-warning">{compareDoc()?.id}</span>
+                  {diff().equal && <span class="text-success"> (identical)</span>}
+                </div>
+                <JsonDiff theme={theme} changes={diff().changes} />
+              </div>
+            )}
+          </Show>
+        </Show>
+      </div>
+    </Show>
+  );
+
+  const editModal = () => (
+    <Show when={isEditing() || isInserting()}>
+      <div class="absolute inset-0 bg-black/70 flex items-center justify-center z-[100]">
+        <div class="flex flex-col w-[500px] max-h-[80%] bg-bg rounded-[var(--radius)] border border-border overflow-hidden">
+          <div class="flex flex-row justify-between p-[var(--spacing-md)] border-b border-border items-center">
+            <span class="font-semibold text-sm">
+              {isInserting() ? "New Document" : `Edit: ${selectedDoc()?.id}`}
             </span>
-            <div class="flex flex-row gap-[var(--spacing-xs)]">
-              <Show when={selectedDoc() && !diffResult()}>
-                <Button theme={theme} size="sm" onClick={loadHistory}>History</Button>
-              </Show>
-              <Show when={props.allowMutations && selectedDoc() && !diffResult()}>
-                <Button theme={theme} size="sm" onClick={startEditing}>Edit</Button>
-                <Button theme={theme} size="sm" variant="danger" onClick={deleteDocument}>Delete</Button>
-              </Show>
-              <Button theme={theme} size="sm" onClick={() => { setSelectedDoc(null); setCompareDoc(null); setDiffResult(null); setShowHistory(false); }}>
-                ×
+            <Button theme={theme} size="sm" onClick={cancelEdit}>×</Button>
+          </div>
+          <div class="flex flex-col p-[var(--spacing-md)] gap-[var(--spacing-md)]">
+            <Show when={editError()}>
+              <div class="text-error bg-error/10 p-[var(--spacing-sm)] rounded-[var(--radius)] text-xs">
+                {editError()}
+              </div>
+            </Show>
+            <CodeEditor
+              theme={theme}
+              value={editingJson()}
+              onChange={setEditingJson}
+              language="json"
+              height="300px"
+              placeholder="Enter document JSON..."
+            />
+            <div class="flex flex-row gap-[var(--spacing-sm)] justify-end">
+              <Button theme={theme} onClick={cancelEdit}>Cancel</Button>
+              <Button theme={theme} variant="primary" onClick={saveDocument} disabled={isSaving()}>
+                {isSaving() ? "Saving..." : isInserting() ? "Create" : "Save"}
               </Button>
             </div>
           </div>
-          <Show when={showHistory()}>
-            <div class="flex-1 overflow-auto">
-              <div class="p-[var(--spacing-sm)] bg-bg-secondary text-[11px] flex justify-between items-center">
-                <span>Version History</span>
-                <Button theme={theme} size="sm" onClick={() => setShowHistory(false)}>Back</Button>
-              </div>
-              <div class="flex-1 overflow-auto">
-                <Show when={docHistory().length === 0}>
-                  <div class="p-[var(--spacing-xl)] text-center text-text-muted">No history recorded for this document</div>
-                </Show>
-                <For each={docHistory()}>
-                  {(version) => (
-                    <div
-                      class="flex flex-row p-[var(--spacing-sm)] border-b border-border cursor-pointer gap-[var(--spacing-sm)] items-center hover:bg-bg-hover"
-                      onClick={() => selectVersion(version)}
-                    >
-                      <span class={`px-[var(--spacing-xs)] py-0.5 rounded-sm text-[10px] font-semibold ${opBadgeClasses[version.operation]}`}>
-                        {version.operation}
-                      </span>
-                      <span class="text-[11px] text-text-muted font-mono">
-                        {new Date(version.timestamp).toLocaleString()}
-                      </span>
-                    </div>
-                  )}
-                </For>
-              </div>
-            </div>
-          </Show>
-          <Show when={!showHistory()}>
-            <Show when={diffResult()} fallback={
-              <div class="flex-1 overflow-auto p-0">
-                <JsonViewer theme={theme} data={selectedDoc()?.data} collapsed={false} />
-              </div>
-            }>
-              {(diff) => (
-                <div class="flex-1 overflow-auto p-0">
-                  <div class="p-[var(--spacing-sm)] bg-bg-secondary text-[11px]">
-                    <span class="text-accent">{selectedDoc()?.id}</span>
-                    {" vs "}
-                    <span class="text-warning">{compareDoc()?.id}</span>
-                    {diff().equal && <span class="text-success"> (identical)</span>}
-                  </div>
-                  <JsonDiff theme={theme} changes={diff().changes} />
-                </div>
-              )}
-            </Show>
-          </Show>
         </div>
-      </Show>
+      </div>
+    </Show>
+  );
 
-      <Show when={isEditing() || isInserting()}>
-        <div class="absolute inset-0 bg-black/70 flex items-center justify-center z-[100]">
-          <div class="flex flex-col w-[500px] max-h-[80%] bg-bg rounded-[var(--radius)] border border-border overflow-hidden">
-            <div class="flex flex-row justify-between p-[var(--spacing-md)] border-b border-border items-center">
-              <span class="font-semibold text-sm">
-                {isInserting() ? "New Document" : `Edit: ${selectedDoc()?.id}`}
-              </span>
-              <Button theme={theme} size="sm" onClick={cancelEdit}>×</Button>
-            </div>
-            <div class="flex flex-col p-[var(--spacing-md)] gap-[var(--spacing-md)]">
-              <Show when={editError()}>
-                <div class="text-error bg-error/10 p-[var(--spacing-sm)] rounded-[var(--radius)] text-xs">
-                  {editError()}
-                </div>
-              </Show>
-              <CodeEditor
-                theme={theme}
-                value={editingJson()}
-                onChange={setEditingJson}
-                language="json"
-                height="300px"
-                placeholder="Enter document JSON..."
-              />
-              <div class="flex flex-row gap-[var(--spacing-sm)] justify-end">
-                <Button theme={theme} onClick={cancelEdit}>Cancel</Button>
-                <Button theme={theme} variant="primary" onClick={saveDocument} disabled={isSaving()}>
-                  {isSaving() ? "Saving..." : isInserting() ? "Create" : "Save"}
-                </Button>
-              </div>
-            </div>
+  const showDetail = () => !!(selectedDoc() || diffResult());
+
+  return (
+    <div class="h-full overflow-hidden relative">
+      <Show
+        when={!isMobile() && showDetail()}
+        fallback={
+          <div class="flex flex-row h-full overflow-hidden relative">
+            {mainListContent()}
+            {detailContent()}
+            {editModal()}
           </div>
-        </div>
+        }
+      >
+        <Resizable
+          theme={theme}
+          direction="horizontal"
+          sizeFromEnd
+          initialSize={400}
+          minSize={250}
+          maxSize={700}
+          class="h-full"
+        >
+          {mainListContent()}
+          {detailContent()}
+        </Resizable>
+        {editModal()}
       </Show>
     </div>
   );

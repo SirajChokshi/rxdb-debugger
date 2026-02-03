@@ -2,6 +2,7 @@ import { createEffect, createSignal, For, onCleanup, Show } from "solid-js";
 import type { RxdbDebugger, PropertyInfo, SchemaDetails, Relationship } from "@rxdb-debugger/core";
 import type { Theme } from "../../styles/theme.js";
 import { fromExplorerQuery } from "../../utils/observable.js";
+import { Resizable } from "../shared/Resizable.js";
 
 export interface CollectionsPanelProps {
   theme: Theme;
@@ -177,152 +178,157 @@ export function CollectionsPanel(props: CollectionsPanelProps) {
     return String(count);
   };
 
-  const containerClasses = () => isMobile() ? "flex flex-col h-full overflow-hidden" : "flex flex-row h-full overflow-hidden";
-
-  const listClasses = () => {
-    const base = "flex flex-col shrink-0 overflow-hidden";
-    return isMobile()
-      ? `${base} w-full max-h-[40%] border-b border-border`
-      : `${base} w-60 h-full border-r border-border`;
-  };
-
-  return (
-    <div class={containerClasses()}>
-      <div class={listClasses()}>
-        <div class="flex flex-col p-[var(--spacing-md)] gap-[var(--spacing-sm)] border-b border-border">
-          <span class="font-semibold text-[11px] uppercase tracking-wider text-text-muted">
-            Collections
-          </span>
-          <input
-            class="px-[var(--spacing-sm)] py-[var(--spacing-xs)] bg-bg-secondary text-text border border-border rounded-[var(--radius)] text-xs outline-none w-full"
-            placeholder="Search collections..."
-            value={searchQuery()}
-            onInput={(e) => setSearchQuery(e.currentTarget.value)}
-          />
-        </div>
-        <div class="flex-1 overflow-auto">
-          <Show when={isLoading()}>
-            <div class="p-[var(--spacing-md)] text-text-muted">Loading...</div>
-          </Show>
-          <Show when={error()}>
-            <div class="p-[var(--spacing-md)] text-error bg-error/10">{error()}</div>
-          </Show>
-          <Show when={!isLoading() && !error() && collections().length === 0}>
-            <div class="p-[var(--spacing-md)] text-text-muted text-center">No collections found</div>
-          </Show>
-          <Show when={!isLoading() && !error() && collections().length > 0 && filteredCollections().length === 0}>
-            <div class="p-[var(--spacing-md)] text-text-muted text-center">No matching collections</div>
-          </Show>
-          <For each={filteredCollections()}>
-            {(col) => {
-              const isSelected = () => selectedCollection() === col.name;
-              const itemClasses = () => {
-                const base = "flex flex-row px-[var(--spacing-md)] py-[var(--spacing-sm)] border-b border-border cursor-pointer";
-                return isSelected() ? `${base} bg-bg-selected` : `${base} hover:bg-bg-hover`;
-              };
-              return (
-                <div class={itemClasses()} onClick={() => setSelectedCollection(col.name)}>
-                  <span class="flex-1 font-medium text-[13px] truncate">{col.name}</span>
-                  <span class="text-[11px] text-text-muted font-mono">{formatCount(col.count)}</span>
-                </div>
-              );
-            }}
-          </For>
-        </div>
+  const listContent = () => (
+    <div class="flex flex-col h-full overflow-hidden">
+      <div class="flex flex-col p-[var(--spacing-md)] gap-[var(--spacing-sm)] border-b border-border">
+        <span class="font-semibold text-[11px] uppercase tracking-wider text-text-muted">
+          Collections
+        </span>
+        <input
+          class="px-[var(--spacing-sm)] py-[var(--spacing-xs)] bg-bg-secondary text-text border border-border rounded-[var(--radius)] text-xs outline-none w-full"
+          placeholder="Search collections..."
+          value={searchQuery()}
+          onInput={(e) => setSearchQuery(e.currentTarget.value)}
+        />
       </div>
-
-      <div class="flex flex-col flex-1 overflow-auto p-[var(--spacing-md)]">
-        <Show when={schemaLoading()}>
-          <div class="text-text-muted">Loading schema...</div>
+      <div class="flex-1 overflow-auto">
+        <Show when={isLoading()}>
+          <div class="p-[var(--spacing-md)] text-text-muted">Loading...</div>
         </Show>
-        <Show when={schemaError()}>
-          <div class="text-error bg-error/10 p-[var(--spacing-md)] rounded-[var(--radius)]">{schemaError()}</div>
+        <Show when={error()}>
+          <div class="p-[var(--spacing-md)] text-error bg-error/10">{error()}</div>
         </Show>
-        <Show when={!schemaLoading() && !schemaError() && !schema() && !selectedCollection()}>
-          <div class="text-text-muted">Select a collection to view its schema</div>
+        <Show when={!isLoading() && !error() && collections().length === 0}>
+          <div class="p-[var(--spacing-md)] text-text-muted text-center">No collections found</div>
         </Show>
-        <Show when={schema()}>
-          {(s) => (
-            <>
-              <div class="block mb-[var(--spacing-lg)]">
-                <div class="font-semibold text-xs mb-[var(--spacing-sm)] text-text">
-                  {s().name} (v{s().version})
-                </div>
-                <div class="text-xs text-text-secondary">
-                  Primary key: <span class="font-mono">{s().primaryKey}</span>
-                </div>
+        <Show when={!isLoading() && !error() && collections().length > 0 && filteredCollections().length === 0}>
+          <div class="p-[var(--spacing-md)] text-text-muted text-center">No matching collections</div>
+        </Show>
+        <For each={filteredCollections()}>
+          {(col) => {
+            const isSelected = () => selectedCollection() === col.name;
+            const itemClasses = () => {
+              const base = "flex flex-row px-[var(--spacing-md)] py-[var(--spacing-sm)] border-b border-border cursor-pointer";
+              return isSelected() ? `${base} bg-bg-selected` : `${base} hover:bg-bg-hover`;
+            };
+            return (
+              <div class={itemClasses()} onClick={() => setSelectedCollection(col.name)}>
+                <span class="flex-1 font-medium text-[13px] truncate">{col.name}</span>
+                <span class="text-[11px] text-text-muted font-mono">{formatCount(col.count)}</span>
               </div>
-
-              <div class="block mb-[var(--spacing-lg)]">
-                <div class="font-semibold text-xs mb-[var(--spacing-sm)] text-text">
-                  Properties ({s().properties.length})
-                </div>
-                <PropertyTree properties={s().properties} depth={0} />
-              </div>
-
-              <Show when={s().indexes.length > 0}>
-                <div class="block mb-[var(--spacing-lg)]">
-                  <div class="font-semibold text-xs mb-[var(--spacing-sm)] text-text">
-                    Indexes ({s().indexes.length})
-                  </div>
-                  <div>
-                    <For each={s().indexes}>
-                      {(idx) => (
-                        <span class="inline-block px-[var(--spacing-sm)] py-[var(--spacing-xs)] bg-bg-secondary rounded-[var(--radius)] font-mono text-[11px] mr-[var(--spacing-xs)] mb-[var(--spacing-xs)]">
-                          {idx.fields.join(" + ")}
-                          {idx.compound && " (compound)"}
-                        </span>
-                      )}
-                    </For>
-                  </div>
-                </div>
-              </Show>
-
-              {(() => {
-                const collName = s().name;
-                const outgoing = relationships().filter(r => r.from.collection === collName);
-                const incoming = relationships().filter(r => r.to.collection === collName);
-                const hasRelations = outgoing.length > 0 || incoming.length > 0;
-                return (
-                  <Show when={hasRelations}>
-                    <div class="block mb-[var(--spacing-lg)]">
-                      <div class="font-semibold text-xs mb-[var(--spacing-sm)] text-text">Relationships</div>
-                      <Show when={outgoing.length > 0}>
-                        <div class="block mb-[var(--spacing-sm)]">
-                          <div class="text-[11px] text-text-muted mb-[var(--spacing-xs)]">References</div>
-                          <For each={outgoing}>
-                            {(rel) => (
-                              <div class="text-xs py-[var(--spacing-xs)]">
-                                <span class="font-mono text-accent">{rel.from.field}</span>
-                                <span class="text-text-muted"> → </span>
-                                <span class="text-success">{rel.to.collection}</span>
-                              </div>
-                            )}
-                          </For>
-                        </div>
-                      </Show>
-                      <Show when={incoming.length > 0}>
-                        <div>
-                          <div class="text-[11px] text-text-muted mb-[var(--spacing-xs)]">Referenced by</div>
-                          <For each={incoming}>
-                            {(rel) => (
-                              <div class="text-xs py-[var(--spacing-xs)]">
-                                <span class="text-warning">{rel.from.collection}</span>
-                                <span class="text-text-muted">.</span>
-                                <span class="font-mono text-accent">{rel.from.field}</span>
-                              </div>
-                            )}
-                          </For>
-                        </div>
-                      </Show>
-                    </div>
-                  </Show>
-                );
-              })()}
-            </>
-          )}
-        </Show>
+            );
+          }}
+        </For>
       </div>
     </div>
+  );
+
+  const detailContent = () => (
+    <div class="flex flex-col h-full overflow-auto p-[var(--spacing-md)]">
+      <Show when={schemaLoading()}>
+        <div class="text-text-muted">Loading schema...</div>
+      </Show>
+      <Show when={schemaError()}>
+        <div class="text-error bg-error/10 p-[var(--spacing-md)] rounded-[var(--radius)]">{schemaError()}</div>
+      </Show>
+      <Show when={!schemaLoading() && !schemaError() && !schema() && !selectedCollection()}>
+        <div class="text-text-muted">Select a collection to view its schema</div>
+      </Show>
+      <Show when={schema()}>
+        {(s) => (
+          <>
+            <div class="block mb-[var(--spacing-lg)]">
+              <div class="font-semibold text-xs mb-[var(--spacing-sm)] text-text">
+                {s().name} (v{s().version})
+              </div>
+              <div class="text-xs text-text-secondary">
+                Primary key: <span class="font-mono">{s().primaryKey}</span>
+              </div>
+            </div>
+
+            <div class="block mb-[var(--spacing-lg)]">
+              <div class="font-semibold text-xs mb-[var(--spacing-sm)] text-text">
+                Properties ({s().properties.length})
+              </div>
+              <PropertyTree properties={s().properties} depth={0} />
+            </div>
+
+            <Show when={s().indexes.length > 0}>
+              <div class="block mb-[var(--spacing-lg)]">
+                <div class="font-semibold text-xs mb-[var(--spacing-sm)] text-text">
+                  Indexes ({s().indexes.length})
+                </div>
+                <div>
+                  <For each={s().indexes}>
+                    {(idx) => (
+                      <span class="inline-block px-[var(--spacing-sm)] py-[var(--spacing-xs)] bg-bg-secondary rounded-[var(--radius)] font-mono text-[11px] mr-[var(--spacing-xs)] mb-[var(--spacing-xs)]">
+                        {idx.fields.join(" + ")}
+                        {idx.compound && " (compound)"}
+                      </span>
+                    )}
+                  </For>
+                </div>
+              </div>
+            </Show>
+
+            {(() => {
+              const collName = s().name;
+              const outgoing = relationships().filter(r => r.from.collection === collName);
+              const incoming = relationships().filter(r => r.to.collection === collName);
+              const hasRelations = outgoing.length > 0 || incoming.length > 0;
+              return (
+                <Show when={hasRelations}>
+                  <div class="block mb-[var(--spacing-lg)]">
+                    <div class="font-semibold text-xs mb-[var(--spacing-sm)] text-text">Relationships</div>
+                    <Show when={outgoing.length > 0}>
+                      <div class="block mb-[var(--spacing-sm)]">
+                        <div class="text-[11px] text-text-muted mb-[var(--spacing-xs)]">References</div>
+                        <For each={outgoing}>
+                          {(rel) => (
+                            <div class="text-xs py-[var(--spacing-xs)]">
+                              <span class="font-mono text-accent">{rel.from.field}</span>
+                              <span class="text-text-muted"> → </span>
+                              <span class="text-success">{rel.to.collection}</span>
+                            </div>
+                          )}
+                        </For>
+                      </div>
+                    </Show>
+                    <Show when={incoming.length > 0}>
+                      <div>
+                        <div class="text-[11px] text-text-muted mb-[var(--spacing-xs)]">Referenced by</div>
+                        <For each={incoming}>
+                          {(rel) => (
+                            <div class="text-xs py-[var(--spacing-xs)]">
+                              <span class="text-warning">{rel.from.collection}</span>
+                              <span class="text-text-muted">.</span>
+                              <span class="font-mono text-accent">{rel.from.field}</span>
+                            </div>
+                          )}
+                        </For>
+                      </div>
+                    </Show>
+                  </div>
+                </Show>
+              );
+            })()}
+          </>
+        )}
+      </Show>
+    </div>
+  );
+
+  return (
+    <Resizable
+      theme={props.theme}
+      direction={isMobile() ? "vertical" : "horizontal"}
+      initialSize={isMobile() ? 200 : 240}
+      minSize={isMobile() ? 100 : 180}
+      maxSize={isMobile() ? 400 : 400}
+      class="h-full"
+    >
+      {listContent()}
+      {detailContent()}
+    </Resizable>
   );
 }
