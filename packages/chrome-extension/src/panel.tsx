@@ -26,6 +26,11 @@ function getDevToolsTheme(): "dark" | "light" {
   }
 }
 
+function applyThemeToBody(theme: "dark" | "light") {
+  document.body.classList.remove("theme-dark", "theme-light");
+  document.body.classList.add(theme === "dark" ? "theme-dark" : "theme-light");
+}
+
 function getStyles() {
   const isDark = getDevToolsTheme() === "dark";
 
@@ -157,6 +162,7 @@ function Panel() {
   onMount(() => {
     let lastTheme = getDevToolsTheme();
     
+    applyThemeToBody(lastTheme);
     connect();
 
     // Listen for page navigation/reload
@@ -171,6 +177,7 @@ function Panel() {
         const currentTheme = getDevToolsTheme();
         if (currentTheme !== lastTheme) {
           lastTheme = currentTheme;
+          applyThemeToBody(currentTheme);
           // Theme changed, reconnect to apply new theme
           connect();
         }
