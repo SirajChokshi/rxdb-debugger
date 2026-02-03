@@ -72,7 +72,7 @@ export function Debugger(props: DebuggerProps): JSX.Element {
 
   return (
     <div
-      class="rxdb-debugger flex flex-col text-[13px] leading-normal rounded-[var(--radius)] overflow-hidden border border-border"
+      class="rxdb-debugger flex flex-col text-[13px] leading-normal overflow-hidden"
       style={containerStyle()}
     >
       <Tabs
