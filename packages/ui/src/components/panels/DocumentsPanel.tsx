@@ -303,7 +303,7 @@ export function DocumentsPanel(props: DocumentsPanelProps) {
   };
 
   const mainListContent = () => (
-    <div class="flex flex-col h-full min-w-0 overflow-hidden">
+    <div class="flex flex-col flex-1 h-full min-w-0 overflow-hidden">
         <div class="flex flex-row p-[var(--spacing-md)] gap-[var(--spacing-sm)] border-b border-border items-center shrink-0 min-h-[44px]">
           <select
             class="px-[var(--spacing-sm)] py-[var(--spacing-xs)] bg-bg-secondary text-text border border-border rounded-[var(--radius)] text-xs"
