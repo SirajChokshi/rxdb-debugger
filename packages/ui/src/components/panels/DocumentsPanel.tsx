@@ -304,7 +304,7 @@ export function DocumentsPanel(props: DocumentsPanelProps) {
 
   const mainListContent = () => (
     <div class="flex flex-col h-full min-w-0 overflow-hidden">
-        <div class="flex flex-row p-[var(--spacing-md)] gap-[var(--spacing-sm)] border-b border-border items-center shrink-0">
+        <div class="flex flex-row p-[var(--spacing-md)] gap-[var(--spacing-sm)] border-b border-border items-center shrink-0 min-h-[44px]">
           <select
             class="px-[var(--spacing-sm)] py-[var(--spacing-xs)] bg-bg-secondary text-text border border-border rounded-[var(--radius)] text-xs"
             value={selectedCollection()}
@@ -399,7 +399,7 @@ export function DocumentsPanel(props: DocumentsPanelProps) {
   const detailContent = () => (
     <Show when={selectedDoc() || diffResult()}>
       <div class={detailClasses()}>
-        <div class="flex flex-row justify-between p-[var(--spacing-md)] border-b border-border items-center shrink-0">
+        <div class="flex flex-row justify-between p-[var(--spacing-md)] border-b border-border items-center shrink-0 min-h-[44px]">
           <span class="font-semibold text-xs font-mono">
             {diffResult() ? "Document Comparison" : selectedDoc()?.id}
           </span>
