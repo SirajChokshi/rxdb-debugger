@@ -9,18 +9,6 @@
         height: 100vh;
       }
     </style>
-    <script>
-      // Detect DevTools theme and apply appropriate class
-      (function() {
-        try {
-          var themeName = chrome.devtools && chrome.devtools.panels && chrome.devtools.panels.themeName;
-          document.body.classList.add(themeName === 'dark' ? 'theme-dark' : 'theme-light');
-        } catch (e) {
-          // Fallback for environments without chrome.devtools
-          document.body.classList.add('theme-dark');
-        }
-      })();
-    </script>
   </head>
   <body>
     <div id="root"></div>
