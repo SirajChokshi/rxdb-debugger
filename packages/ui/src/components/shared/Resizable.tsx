@@ -169,6 +169,7 @@ export function Resizable(props: ResizableProps) {
 
   const borderStyle = (): JSX.CSSProperties => {
     const halfHandle = HANDLE_HIT_AREA / 2;
+    const borderColor = local.theme.colors.border;
     
     if (isHorizontal()) {
       return {
@@ -177,7 +178,7 @@ export function Resizable(props: ResizableProps) {
         bottom: 0,
         left: `${halfHandle}px`,
         width: "1px",
-        "background-color": "var(--border)",
+        "background-color": borderColor,
         "pointer-events": "none",
       };
     }
@@ -187,7 +188,7 @@ export function Resizable(props: ResizableProps) {
       right: 0,
       top: `${halfHandle}px`,
       height: "1px",
-      "background-color": "var(--border)",
+      "background-color": borderColor,
       "pointer-events": "none",
     };
   };
