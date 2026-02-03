@@ -101,9 +101,7 @@ export function DocumentsPanel(props: DocumentsPanelProps) {
     if (docsAccessor) {
       const docs = docsAccessor();
       setDocuments(docs);
-      if (docs.length > 0 || !isLoading()) {
-        setIsLoading(false);
-      }
+      setIsLoading(false);
     }
   });
 
