@@ -13,7 +13,7 @@ type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string
 export function JsonViewer(props: JsonViewerProps) {
   return (
     <div
-      class="overflow-auto font-mono text-xs leading-relaxed p-[var(--spacing-md)] bg-bg"
+      class="overflow-auto font-mono text-xs leading-relaxed p-[var(--spacing-md)] bg-bg select-text"
       style={props.maxHeight ? { "max-height": props.maxHeight } : undefined}
     >
       <JsonNode
