@@ -195,10 +195,14 @@ export function QueryPanel(props: QueryPanelProps) {
     setDuration(null);
 
     try {
+      const currentClauses = clauses();
+      console.log("[DEBUG] runBuilderQuery - clauses:", JSON.stringify(currentClauses));
       const query = buildQueryFromBuilder();
+      console.log("[DEBUG] runBuilderQuery - built query:", JSON.stringify(query));
       setQueryText(JSON.stringify(query, null, 2));
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const result = await props.debugger.query.execute(collection, query as any).get();
+      console.log("[DEBUG] runBuilderQuery - result count:", result.count);
       setResults(result.documents);
       setDuration(result.duration);
       setHasRun(true);
