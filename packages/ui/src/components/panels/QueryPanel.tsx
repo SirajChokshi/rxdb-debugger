@@ -1,4 +1,4 @@
-import { createEffect, createSignal, For, Show } from "solid-js";
+import { createEffect, createSignal, For, Index, Show } from "solid-js";
 import type { RxdbDebugger, QueryDocument, QueryHistoryEntry, QueryExplanation } from "@rxdb-debugger/core";
 import type { Theme } from "../../styles/theme.js";
 import { Button } from "../shared/Button.js";
@@ -275,19 +275,19 @@ export function QueryPanel(props: QueryPanelProps) {
             <span class="text-xs font-medium">Filters</span>
             <Button theme={theme} size="sm" onClick={addClause}>+ Add Filter</Button>
           </div>
-          <For each={clauses()}>
+          <Index each={clauses()}>
             {(clause) => (
               <div class="flex flex-row gap-[var(--spacing-sm)] items-center">
                 <input
                   class={inputClasses}
                   placeholder="field"
-                  value={clause.field}
-                  onInput={(e) => updateClause(clause.id, "field", e.currentTarget.value)}
+                  value={clause().field}
+                  onInput={(e) => updateClause(clause().id, "field", e.currentTarget.value)}
                 />
                 <select
                   class="p-[var(--spacing-xs)] bg-bg-secondary border border-border rounded-[var(--radius)] text-text text-xs"
-                  value={clause.operator}
-                  onChange={(e) => updateClause(clause.id, "operator", e.currentTarget.value)}
+                  value={clause().operator}
+                  onChange={(e) => updateClause(clause().id, "operator", e.currentTarget.value)}
                 >
                   <option value="$eq">=</option>
                   <option value="$ne">≠</option>
@@ -301,13 +301,13 @@ export function QueryPanel(props: QueryPanelProps) {
                 <input
                   class={inputClasses}
                   placeholder="value"
-                  value={clause.value}
-                  onInput={(e) => updateClause(clause.id, "value", e.currentTarget.value)}
+                  value={clause().value}
+                  onInput={(e) => updateClause(clause().id, "value", e.currentTarget.value)}
                 />
-                <Button theme={theme} size="sm" variant="danger" onClick={() => removeClause(clause.id)}>×</Button>
+                <Button theme={theme} size="sm" variant="danger" onClick={() => removeClause(clause().id)}>×</Button>
               </div>
             )}
-          </For>
+          </Index>
           <Show when={clauses().length === 0}>
             <div class="text-xs text-text-muted">No filters. Click "+ Add Filter" to add one.</div>
           </Show>
