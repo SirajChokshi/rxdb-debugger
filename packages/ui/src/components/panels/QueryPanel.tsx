@@ -1,4 +1,4 @@
-import { createEffect, createSignal, For, Show } from "solid-js";
+import { createEffect, createSignal, For, Index, Show } from "solid-js";
 import type { RxdbDebugger, QueryDocument, QueryHistoryEntry, QueryExplanation } from "@rxdb-debugger/core";
 import type { Theme } from "../../styles/theme.js";
 import { Button } from "../shared/Button.js";
@@ -216,9 +216,33 @@ export function QueryPanel(props: QueryPanelProps) {
         <Button theme={theme} variant="secondary" onClick={exportResults} disabled={isExporting()}>
           {isExporting() ? "Exporting..." : "Export"}
         </Button>
-        <Button theme={theme} onClick={() => { setShowHistory(!showHistory()); refreshHistory(); }}>
-          History
-        </Button>
+        <div class="relative">
+          <Button theme={theme} onClick={() => { setShowHistory(!showHistory()); refreshHistory(); }}>
+            History
+          </Button>
+          <Show when={showHistory()}>
+            <div class="absolute left-0 top-full mt-1 w-[300px] max-h-[300px] bg-bg border border-border rounded-[var(--radius)] shadow-lg z-10 overflow-hidden flex flex-col">
+              <div class="flex-1 overflow-auto">
+                <For each={history()} fallback={
+                  <div class="p-[var(--spacing-md)] text-text-muted">No history yet</div>
+                }>
+                  {(entry) => (
+                    <div
+                      class="p-[var(--spacing-sm)] border-b border-border cursor-pointer text-[11px] hover:bg-bg-hover"
+                      onClick={() => loadFromHistory(entry)}
+                    >
+                      <div class="font-medium">{entry.collection}</div>
+                      <div class="text-text-muted">
+                        {entry.resultCount} results • {entry.duration.toFixed(1)}ms
+                        {!entry.success && ` • ${entry.error}`}
+                      </div>
+                    </div>
+                  )}
+                </For>
+              </div>
+            </div>
+          </Show>
+        </div>
         <div class="flex flex-row gap-0.5 bg-bg-secondary rounded-[var(--radius)] p-0.5">
           <button class={modeButtonClasses(queryMode() === "json")} onClick={() => setQueryMode("json")}>
             JSON
@@ -232,29 +256,6 @@ export function QueryPanel(props: QueryPanelProps) {
           <span class="text-[11px] text-text-muted">{duration()?.toFixed(1)}ms</span>
         </Show>
       </div>
-
-      <Show when={showHistory()}>
-        <div class="absolute right-[var(--spacing-md)] top-[50px] w-[300px] max-h-[300px] bg-bg border border-border rounded-[var(--radius)] shadow-lg z-10 overflow-hidden flex flex-col">
-          <div class="flex-1 overflow-auto">
-            <For each={history()} fallback={
-              <div class="p-[var(--spacing-md)] text-text-muted">No history yet</div>
-            }>
-              {(entry) => (
-                <div
-                  class="p-[var(--spacing-sm)] border-b border-border cursor-pointer text-[11px] hover:bg-bg-hover"
-                  onClick={() => loadFromHistory(entry)}
-                >
-                  <div class="font-medium">{entry.collection}</div>
-                  <div class="text-text-muted">
-                    {entry.resultCount} results • {entry.duration.toFixed(1)}ms
-                    {!entry.success && ` • ${entry.error}`}
-                  </div>
-                </div>
-              )}
-            </For>
-          </div>
-        </div>
-      </Show>
 
       <Show when={queryMode() === "json"}>
         <div class="p-[var(--spacing-md)] pt-0 shrink-0">
@@ -275,19 +276,19 @@ export function QueryPanel(props: QueryPanelProps) {
             <span class="text-xs font-medium">Filters</span>
             <Button theme={theme} size="sm" onClick={addClause}>+ Add Filter</Button>
           </div>
-          <For each={clauses()}>
+          <Index each={clauses()}>
             {(clause) => (
               <div class="flex flex-row gap-[var(--spacing-sm)] items-center">
                 <input
                   class={inputClasses}
                   placeholder="field"
-                  value={clause.field}
-                  onInput={(e) => updateClause(clause.id, "field", e.currentTarget.value)}
+                  value={clause().field}
+                  onInput={(e) => updateClause(clause().id, "field", e.currentTarget.value)}
                 />
                 <select
                   class="p-[var(--spacing-xs)] bg-bg-secondary border border-border rounded-[var(--radius)] text-text text-xs"
-                  value={clause.operator}
-                  onChange={(e) => updateClause(clause.id, "operator", e.currentTarget.value)}
+                  value={clause().operator}
+                  onChange={(e) => updateClause(clause().id, "operator", e.currentTarget.value)}
                 >
                   <option value="$eq">=</option>
                   <option value="$ne">≠</option>
@@ -301,13 +302,13 @@ export function QueryPanel(props: QueryPanelProps) {
                 <input
                   class={inputClasses}
                   placeholder="value"
-                  value={clause.value}
-                  onInput={(e) => updateClause(clause.id, "value", e.currentTarget.value)}
+                  value={clause().value}
+                  onInput={(e) => updateClause(clause().id, "value", e.currentTarget.value)}
                 />
-                <Button theme={theme} size="sm" variant="danger" onClick={() => removeClause(clause.id)}>×</Button>
+                <Button theme={theme} size="sm" variant="danger" onClick={() => removeClause(clause().id)}>×</Button>
               </div>
             )}
-          </For>
+          </Index>
           <Show when={clauses().length === 0}>
             <div class="text-xs text-text-muted">No filters. Click "+ Add Filter" to add one.</div>
           </Show>
