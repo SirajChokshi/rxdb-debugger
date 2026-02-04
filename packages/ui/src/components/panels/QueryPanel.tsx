@@ -37,6 +37,7 @@ export function QueryPanel(props: QueryPanelProps) {
   let clauseIdCounter = 0;
 
   const { theme } = props;
+  let prevQueryMode = queryMode();
 
   createEffect(() => {
     props.debugger.catalog.collectionNames().get().then((names) => {
@@ -46,6 +47,14 @@ export function QueryPanel(props: QueryPanelProps) {
         setSelectedCollection(first);
       }
     });
+  });
+
+  createEffect(() => {
+    const currentMode = queryMode();
+    if (prevQueryMode === "builder" && currentMode === "json") {
+      syncBuilderToJson();
+    }
+    prevQueryMode = currentMode;
   });
 
   const runQuery = async () => {
@@ -153,7 +162,12 @@ export function QueryPanel(props: QueryPanelProps) {
     const selector: Record<string, unknown> = {};
     for (const clause of clauses()) {
       if (clause.field) {
-        selector[clause.field] = { [clause.operator]: parseValue(clause.value) };
+        const parsedValue = parseValue(clause.value);
+        if (clause.operator === "$eq") {
+          selector[clause.field] = parsedValue;
+        } else {
+          selector[clause.field] = { [clause.operator]: parsedValue };
+        }
       }
     }
     const query: { selector: Record<string, unknown>; sort?: unknown[]; limit: number } = {
@@ -172,8 +186,29 @@ export function QueryPanel(props: QueryPanelProps) {
   };
 
   const runBuilderQuery = async () => {
-    syncBuilderToJson();
-    await runQuery();
+    const collection = selectedCollection();
+    if (!collection) return;
+
+    setIsRunning(true);
+    setError(null);
+    setResults([]);
+    setDuration(null);
+
+    try {
+      const query = buildQueryFromBuilder();
+      setQueryText(JSON.stringify(query, null, 2));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = await props.debugger.query.execute(collection, query as any).get();
+      setResults(result.documents);
+      setDuration(result.duration);
+      setHasRun(true);
+      refreshHistory();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setHasRun(true);
+    } finally {
+      setIsRunning(false);
+    }
   };
 
   const loadFromHistory = (entry: QueryHistoryEntry) => {
@@ -207,7 +242,7 @@ export function QueryPanel(props: QueryPanelProps) {
             {(name) => <option value={name}>{name}</option>}
           </For>
         </select>
-        <Button theme={theme} variant="primary" onClick={queryMode() === "builder" ? runBuilderQuery : runQuery} disabled={isRunning()}>
+        <Button theme={theme} variant="primary" onClick={() => queryMode() === "builder" ? runBuilderQuery() : runQuery()} disabled={isRunning()}>
           {isRunning() ? "Running..." : "Run Query"}
         </Button>
         <Button theme={theme} variant="secondary" onClick={explainQuery} disabled={isExplaining()}>
