@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import type { RxDatabase, RxChangeEvent } from "rxdb";
 import type { RxdbDebugger } from "@rxdb-debugger/core";
+import { Menu } from "@base-ui/react/menu";
 import {
   getDatabase,
   seedDatabase,
@@ -49,8 +50,21 @@ interface Playlist {
   name: string;
   description: string;
   ownerId: string;
+  coverUrl?: string;
   isPublic: boolean;
+  isCollaborative?: boolean;
   followerCount: number;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
+interface PlaylistSong {
+  id: string;
+  playlistId: string;
+  songId: string;
+  position: number;
+  addedById: string;
+  addedAt: number;
 }
 
 interface User {
@@ -101,9 +115,13 @@ export default function App(): JSX.Element {
   const [albums, setAlbums] = useState<Album[]>([]);
   const [songs, setSongs] = useState<Song[]>([]);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
+  const [playlistSongs, setPlaylistSongs] = useState<PlaylistSong[]>([]);
   const [users, setUsers] = useState<User[]>([]);
 
   const [selectedArtist, setSelectedArtist] = useState<Artist | null>(null);
+  const [selectedPlaylistId, setSelectedPlaylistId] = useState<string | null>(null);
+  const [createPlaylistOpen, setCreatePlaylistOpen] = useState(false);
+  const [newPlaylistName, setNewPlaylistName] = useState("");
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
 
   const debuggerRef = useRef<HTMLDivElement>(null);
@@ -220,11 +238,26 @@ export default function App(): JSX.Element {
 
   useEffect(() => {
     if (!db) return;
+    const sub = db.collections["playlistSongs"]?.find().$.subscribe((docs: unknown[]) => {
+      setPlaylistSongs(docs.map((d: unknown) => (d as { toJSON: (flag: boolean) => PlaylistSong }).toJSON(true)));
+    });
+    return () => sub?.unsubscribe();
+  }, [db]);
+
+  useEffect(() => {
+    if (!db) return;
     const sub = db.collections["users"]?.find().$.subscribe((docs: unknown[]) => {
       setUsers(docs.map((d: unknown) => (d as { toJSON: (flag: boolean) => User }).toJSON(true)));
     });
     return () => sub?.unsubscribe();
   }, [db]);
+
+  useEffect(() => {
+    if (!selectedPlaylistId) return;
+    if (!playlists.some((playlist) => playlist.id === selectedPlaylistId)) {
+      setSelectedPlaylistId(null);
+    }
+  }, [playlists, selectedPlaylistId]);
 
   // Mount debugger
   useEffect(() => {
@@ -255,6 +288,9 @@ export default function App(): JSX.Element {
     };
   }, [db, showDebugger, isMinimized]);
 
+  const currentUser = users[0] || null;
+  const currentUserId = currentUser?.id || "user-local";
+
   const handleSeed = useCallback(async () => {
     if (!db || isSeeding) return;
     setIsSeeding(true);
@@ -279,7 +315,90 @@ export default function App(): JSX.Element {
     setIsSeeded(false);
     setCurrentSong(null);
     setSelectedArtist(null);
+    setSelectedPlaylistId(null);
+    setCreatePlaylistOpen(false);
+    setNewPlaylistName("");
     setEvents([]);
+  }, [db]);
+
+  const handleCreatePlaylist = useCallback(async () => {
+    if (!db) return;
+    const name = newPlaylistName.trim();
+    if (!name) return;
+    const playlistsCollection = db.collections["playlists"];
+    if (!playlistsCollection) return;
+
+    const now = Date.now();
+    const playlistId = `playlist-${crypto.randomUUID()}`;
+    await playlistsCollection.insert({
+      id: playlistId,
+      name,
+      description: `Created by ${currentUser?.displayName || "You"}`,
+      ownerId: currentUserId,
+      coverUrl: `https://picsum.photos/seed/${playlistId}/300/300`,
+      isPublic: false,
+      isCollaborative: false,
+      followerCount: 0,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    setNewPlaylistName("");
+    setCreatePlaylistOpen(false);
+    setSelectedPlaylistId(playlistId);
+    setSelectedArtist(null);
+    setActiveView("playlists");
+  }, [currentUser?.displayName, currentUserId, db, newPlaylistName]);
+
+  const handleOpenPlaylist = useCallback((playlistId: string) => {
+    setSelectedPlaylistId(playlistId);
+    setSelectedArtist(null);
+    setActiveView("playlists");
+  }, []);
+
+  const handleAddSongToPlaylist = useCallback(async (playlistId: string, songId: string) => {
+    if (!db) return;
+    const playlistSongsCollection = db.collections["playlistSongs"];
+    if (!playlistSongsCollection) return;
+
+    const existingRelation = playlistSongs.find(
+      (playlistSong) => playlistSong.playlistId === playlistId && playlistSong.songId === songId,
+    );
+    if (existingRelation) return;
+
+    const maxPosition = playlistSongs.reduce((max, playlistSong) => {
+      if (playlistSong.playlistId !== playlistId) return max;
+      return Math.max(max, playlistSong.position);
+    }, 0);
+
+    await playlistSongsCollection.insert({
+      id: `ps-${crypto.randomUUID()}`,
+      playlistId,
+      songId,
+      position: maxPosition + 1,
+      addedById: currentUserId,
+      addedAt: Date.now(),
+    });
+
+    const playlistDoc = await db.collections["playlists"]?.findOne(playlistId).exec();
+    if (playlistDoc) {
+      await (playlistDoc as { incrementalPatch: (patch: { updatedAt: number }) => Promise<void> })
+        .incrementalPatch({ updatedAt: Date.now() });
+    }
+  }, [currentUserId, db, playlistSongs]);
+
+  const handleRemoveSongFromPlaylist = useCallback(async (playlistSongId: string, playlistId: string) => {
+    if (!db) return;
+    const playlistSongDoc = await db.collections["playlistSongs"]?.findOne(playlistSongId).exec();
+    if (!playlistSongDoc) return;
+
+    await playlistSongDoc.remove();
+
+    const playlistDoc = await db.collections["playlists"]?.findOne(playlistId).exec();
+    if (playlistDoc) {
+      await (playlistDoc as { incrementalPatch: (patch: { updatedAt: number }) => Promise<void> })
+        .incrementalPatch({ updatedAt: Date.now() });
+    }
   }, [db]);
 
   // Resize handlers
@@ -315,9 +434,11 @@ export default function App(): JSX.Element {
   const getArtistName = (artistId: string) => artists.find((a) => a.id === artistId)?.name || "Unknown";
   const getAlbumTitle = (albumId: string) => albums.find((a) => a.id === albumId)?.title || "Unknown";
   const getAlbum = (albumId: string) => albums.find((a) => a.id === albumId);
+  const getUserName = (userId: string) => users.find((user) => user.id === userId)?.displayName || "Unknown";
 
   const artistSongs = selectedArtist ? songs.filter(s => s.artistId === selectedArtist.id) : [];
   const artistAlbums = selectedArtist ? albums.filter(a => a.artistId === selectedArtist.id) : [];
+  const selectedPlaylist = selectedPlaylistId ? playlists.find((playlist) => playlist.id === selectedPlaylistId) || null : null;
 
   // Stats for the debugger header
   const stats = {
@@ -332,7 +453,7 @@ export default function App(): JSX.Element {
 
   if (!db) {
     return (
-      <div className="flex items-center justify-center h-screen bg-black select-none">
+      <div className="flex items-center justify-center h-screen bg-black">
         <div className="text-center">
           <div className="w-12 h-12 border-4 border-green-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
           <p className="text-neutral-400">Loading...</p>
@@ -342,7 +463,7 @@ export default function App(): JSX.Element {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-black text-white overflow-hidden select-none">
+    <div className="h-screen flex flex-col bg-black text-white overflow-hidden isolate">
       {/* Main Layout */}
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
@@ -355,27 +476,52 @@ export default function App(): JSX.Element {
           </div>
 
           <nav className="flex flex-col gap-1">
-            <NavButton active={activeView === "home"} onClick={() => { setActiveView("home"); setSelectedArtist(null); }}>
+            <NavButton active={activeView === "home"} onClick={() => { setActiveView("home"); setSelectedArtist(null); setSelectedPlaylistId(null); }}>
               <HomeIcon /> Home
             </NavButton>
-            <NavButton active={activeView === "songs"} onClick={() => { setActiveView("songs"); setSelectedArtist(null); }}>
+            <NavButton active={activeView === "songs"} onClick={() => { setActiveView("songs"); setSelectedArtist(null); setSelectedPlaylistId(null); }}>
               <MusicIcon /> All Songs
             </NavButton>
           </nav>
 
           <div>
-            <p className="text-neutral-500 text-xs font-semibold uppercase tracking-wider px-3 mb-2">Library</p>
+            <div className="flex items-center justify-between px-3 mb-2">
+              <p className="text-neutral-500 text-xs font-semibold uppercase tracking-wider">Library</p>
+              <button
+                onClick={() => setCreatePlaylistOpen(true)}
+                className="w-6 h-6 rounded-full bg-neutral-800 text-neutral-300 hover:text-white hover:bg-neutral-700 transition-colors flex items-center justify-center"
+                title="Create playlist"
+              >
+                <PlusIcon />
+              </button>
+            </div>
             <nav className="flex flex-col gap-1">
-              <NavButton active={activeView === "artists"} onClick={() => { setActiveView("artists"); setSelectedArtist(null); }}>
+              <NavButton active={activeView === "artists"} onClick={() => { setActiveView("artists"); setSelectedArtist(null); setSelectedPlaylistId(null); }}>
                 <ArtistIcon /> Artists
               </NavButton>
-              <NavButton active={activeView === "albums"} onClick={() => { setActiveView("albums"); setSelectedArtist(null); }}>
+              <NavButton active={activeView === "albums"} onClick={() => { setActiveView("albums"); setSelectedArtist(null); setSelectedPlaylistId(null); }}>
                 <AlbumIcon /> Albums
               </NavButton>
-              <NavButton active={activeView === "playlists"} onClick={() => { setActiveView("playlists"); setSelectedArtist(null); }}>
+              <NavButton active={activeView === "playlists"} onClick={() => { setActiveView("playlists"); setSelectedArtist(null); setSelectedPlaylistId(null); }}>
                 <PlaylistIcon /> Playlists
               </NavButton>
             </nav>
+
+            <div className="mt-4 space-y-1 max-h-44 overflow-y-auto pr-1">
+              {playlists.slice(0, 8).map((playlist) => (
+                <button
+                  key={playlist.id}
+                  onClick={() => handleOpenPlaylist(playlist.id)}
+                  className={`w-full text-left px-3 py-1.5 rounded text-sm truncate transition-colors ${
+                    selectedPlaylistId === playlist.id && activeView === "playlists"
+                      ? "bg-neutral-800 text-white"
+                      : "text-neutral-400 hover:text-white hover:bg-neutral-900"
+                  }`}
+                >
+                  {playlist.name}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="mt-auto flex flex-col gap-2">
@@ -421,7 +567,29 @@ export default function App(): JSX.Element {
           )}
           {activeView === "albums" && <AlbumsGrid albums={albums} getArtistName={getArtistName} />}
           {activeView === "songs" && <SongsView songs={songs} getArtistName={getArtistName} getAlbumTitle={getAlbumTitle} onPlaySong={setCurrentSong} currentSong={currentSong} />}
-          {activeView === "playlists" && <PlaylistsView playlists={playlists} users={users} />}
+          {activeView === "playlists" && !selectedPlaylist && (
+            <PlaylistsView
+              playlists={playlists}
+              users={users}
+              onSelectPlaylist={handleOpenPlaylist}
+              onCreatePlaylist={() => setCreatePlaylistOpen(true)}
+            />
+          )}
+          {activeView === "playlists" && selectedPlaylist && (
+            <PlaylistDetailView
+              playlist={selectedPlaylist}
+              songs={songs}
+              playlistSongs={playlistSongs}
+              getArtistName={getArtistName}
+              getAlbumTitle={getAlbumTitle}
+              getUserName={getUserName}
+              onBack={() => setSelectedPlaylistId(null)}
+              onPlaySong={setCurrentSong}
+              currentSong={currentSong}
+              onAddSongToPlaylist={handleAddSongToPlaylist}
+              onRemoveSongFromPlaylist={handleRemoveSongFromPlaylist}
+            />
+          )}
         </main>
       </div>
 
@@ -462,6 +630,19 @@ export default function App(): JSX.Element {
           </div>
         </div>
       )}
+
+      <CreatePlaylistDialog
+        open={createPlaylistOpen}
+        playlistName={newPlaylistName}
+        onPlaylistNameChange={setNewPlaylistName}
+        onOpenChange={(open) => {
+          setCreatePlaylistOpen(open);
+          if (!open) {
+            setNewPlaylistName("");
+          }
+        }}
+        onCreatePlaylist={handleCreatePlaylist}
+      />
 
       {/* Floating Debugger Toggle (when closed) */}
       {!showDebugger && (
@@ -852,25 +1033,297 @@ function SongsView({ songs, getArtistName, getAlbumTitle, onPlaySong, currentSon
   );
 }
 
-function PlaylistsView({ playlists, users }: { playlists: Playlist[]; users: User[] }) {
-  const getUserName = (id: string) => users.find(u => u.id === id)?.displayName || "Unknown";
+function PlaylistsView({
+  playlists,
+  users,
+  onSelectPlaylist,
+  onCreatePlaylist,
+}: {
+  playlists: Playlist[];
+  users: User[];
+  onSelectPlaylist: (playlistId: string) => void;
+  onCreatePlaylist: () => void;
+}) {
+  const getUserName = (id: string) => users.find((user) => user.id === id)?.displayName || "Unknown";
 
   return (
     <div className="p-8">
-      <h1 className="text-3xl font-bold mb-6">Playlists</h1>
-      <div className="grid grid-cols-5 gap-6">
-        {playlists.map((playlist) => (
-          <div key={playlist.id} className="group">
-            <div className="aspect-square bg-linear-to-br from-indigo-500 to-purple-600 rounded-lg mb-3 flex items-center justify-center relative shadow-lg">
-              <span className="text-5xl">🎶</span>
-              <button className="absolute bottom-2 right-2 w-12 h-12 bg-green-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all shadow-xl text-black">
-                <PlayIcon />
-              </button>
-            </div>
-            <p className="font-medium truncate">{playlist.name}</p>
-            <p className="text-neutral-400 text-sm truncate">By {getUserName(playlist.ownerId)}</p>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-3xl font-bold">Playlists</h1>
+        <button
+          onClick={onCreatePlaylist}
+          className="px-4 py-2 rounded-full bg-white text-black font-semibold hover:scale-105 transition-transform"
+        >
+          Create playlist
+        </button>
+      </div>
+
+      {playlists.length === 0 ? (
+        <div className="border border-neutral-800 rounded-xl p-10 text-center bg-neutral-900/50">
+          <p className="text-xl font-semibold mb-2">No playlists yet</p>
+          <p className="text-neutral-400 mb-6">Create your first playlist and start adding songs.</p>
+          <button
+            onClick={onCreatePlaylist}
+            className="px-5 py-2.5 rounded-full bg-green-500 text-black font-semibold hover:bg-green-400 transition-colors"
+          >
+            Create playlist
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-5 gap-6">
+          {playlists.map((playlist) => (
+            <button
+              key={playlist.id}
+              onClick={() => onSelectPlaylist(playlist.id)}
+              className="group text-left rounded-lg p-3 hover:bg-neutral-800/60 transition-colors"
+            >
+              <div className="aspect-square bg-linear-to-br from-indigo-500 to-purple-600 rounded-lg mb-3 relative shadow-lg overflow-hidden">
+                {playlist.coverUrl ? (
+                  <img src={playlist.coverUrl} alt="" className="w-full h-full object-cover" draggable={false} />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-5xl">🎶</div>
+                )}
+                <span className="absolute bottom-2 right-2 w-12 h-12 bg-green-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all shadow-xl text-black">
+                  <PlayIcon />
+                </span>
+              </div>
+              <p className="font-medium truncate">{playlist.name}</p>
+              <p className="text-neutral-400 text-sm truncate">By {getUserName(playlist.ownerId)}</p>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PlaylistDetailView({
+  playlist,
+  songs,
+  playlistSongs,
+  getArtistName,
+  getAlbumTitle,
+  getUserName,
+  onBack,
+  onPlaySong,
+  currentSong,
+  onAddSongToPlaylist,
+  onRemoveSongFromPlaylist,
+}: {
+  playlist: Playlist;
+  songs: Song[];
+  playlistSongs: PlaylistSong[];
+  getArtistName: (id: string) => string;
+  getAlbumTitle: (id: string) => string;
+  getUserName: (id: string) => string;
+  onBack: () => void;
+  onPlaySong: (song: Song) => void;
+  currentSong: Song | null;
+  onAddSongToPlaylist: (playlistId: string, songId: string) => Promise<void>;
+  onRemoveSongFromPlaylist: (playlistSongId: string, playlistId: string) => Promise<void>;
+}) {
+  const playlistEntries = [...playlistSongs]
+    .filter((playlistSong) => playlistSong.playlistId === playlist.id)
+    .sort((a, b) => a.position - b.position);
+  const songsById = new Map(songs.map((song) => [song.id, song]));
+  const playlistTracks: { entry: PlaylistSong; song: Song }[] = playlistEntries.flatMap((entry) => {
+    const song = songsById.get(entry.songId);
+    return song ? [{ entry, song }] : [];
+  });
+  const playlistSongIds = new Set(playlistEntries.map((entry) => entry.songId));
+  const availableSongs = songs.filter((song) => !playlistSongIds.has(song.id));
+  const totalDurationMs = playlistTracks.reduce((sum, track) => sum + track.song.durationMs, 0);
+
+  return (
+    <div>
+      <div className="h-72 bg-linear-to-b from-emerald-800 to-transparent p-8 flex items-end">
+        <div>
+          <button onClick={onBack} className="text-neutral-300 hover:text-white mb-4 text-sm flex items-center gap-1">
+            ← Back
+          </button>
+          <p className="text-xs uppercase tracking-widest text-neutral-300 mb-2">Playlist</p>
+          <h1 className="text-6xl font-bold mb-2">{playlist.name}</h1>
+          <p className="text-neutral-300">
+            By {getUserName(playlist.ownerId)} • {playlistTracks.length} songs • {formatDuration(totalDurationMs)}
+          </p>
+        </div>
+      </div>
+
+      <div className="p-8">
+        <div className="flex items-center gap-4 mb-8">
+          <button
+            onClick={() => playlistTracks[0] && onPlaySong(playlistTracks[0].song)}
+            className="w-14 h-14 bg-green-500 rounded-full flex items-center justify-center text-black hover:scale-105 transition-transform shadow-xl"
+          >
+            <PlayIcon />
+          </button>
+
+          <Menu.Root modal={false}>
+            <Menu.Trigger className="px-4 py-2 rounded-full border border-neutral-700 text-sm font-semibold hover:border-white transition-colors">
+              Add songs
+            </Menu.Trigger>
+            <Menu.Portal>
+              <Menu.Positioner sideOffset={10} align="start">
+                <Menu.Popup className="z-[75] w-80 max-h-80 overflow-y-auto rounded-lg border border-neutral-700 bg-neutral-900 p-1 shadow-2xl">
+                  {availableSongs.length === 0 ? (
+                    <Menu.Item disabled className="px-3 py-2 text-neutral-500 text-sm">
+                      All songs are already in this playlist
+                    </Menu.Item>
+                  ) : (
+                    availableSongs.map((song) => (
+                      <Menu.Item
+                        key={song.id}
+                        onClick={() => void onAddSongToPlaylist(playlist.id, song.id)}
+                        className="px-3 py-2 rounded text-sm cursor-pointer text-white hover:bg-neutral-800 data-[highlighted]:bg-neutral-800 data-[highlighted]:outline-none"
+                      >
+                        <p className="truncate">{song.title}</p>
+                        <p className="text-xs text-neutral-400 truncate">{getArtistName(song.artistId)}</p>
+                      </Menu.Item>
+                    ))
+                  )}
+                </Menu.Popup>
+              </Menu.Positioner>
+            </Menu.Portal>
+          </Menu.Root>
+        </div>
+
+        <div className="flex items-center gap-4 px-4 py-2 border-b border-neutral-800 text-neutral-400 text-sm mb-2">
+          <span className="w-8 text-center">#</span>
+          <span className="flex-1">Title</span>
+          <span className="w-56">Album</span>
+          <span className="w-14 text-right">⏱</span>
+          <span className="w-10" />
+        </div>
+
+        {playlistTracks.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-neutral-700 p-10 text-center text-neutral-400">
+            Open the Add songs menu to add tracks to this playlist.
           </div>
-        ))}
+        ) : (
+          <div className="flex flex-col">
+            {playlistTracks.map(({ entry, song }, index) => (
+              <div
+                key={entry.id}
+                className={`flex items-center gap-4 px-4 py-2 rounded transition-colors ${
+                  currentSong?.id === song.id ? "bg-neutral-800/60" : "hover:bg-neutral-800/50"
+                }`}
+              >
+                <button
+                  onClick={() => onPlaySong(song)}
+                  className="flex items-center gap-4 flex-1 min-w-0 text-left"
+                >
+                  <span className="w-8 text-neutral-500 text-center text-sm">{index + 1}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className={`font-medium truncate ${currentSong?.id === song.id ? "text-green-500" : "text-white"}`}>
+                      {song.title}
+                    </p>
+                    <p className="text-neutral-400 text-sm truncate">{getArtistName(song.artistId)}</p>
+                  </div>
+                  <span className="w-56 text-neutral-400 text-sm truncate">{getAlbumTitle(song.albumId)}</span>
+                  <span className="w-14 text-neutral-500 text-sm text-right">{formatDuration(song.durationMs)}</span>
+                </button>
+
+                <Menu.Root modal={false}>
+                  <Menu.Trigger className="w-8 h-8 rounded-full hover:bg-neutral-700 text-neutral-300 hover:text-white transition-colors flex items-center justify-center">
+                    <MoreIcon />
+                  </Menu.Trigger>
+                  <Menu.Portal>
+                    <Menu.Positioner sideOffset={8} align="end">
+                      <Menu.Popup className="z-[75] rounded-lg border border-neutral-700 bg-neutral-900 p-1 shadow-2xl min-w-52">
+                        <Menu.Item
+                          onClick={() => void onRemoveSongFromPlaylist(entry.id, playlist.id)}
+                          className="px-3 py-2 rounded text-sm cursor-pointer text-red-300 hover:bg-red-500/20 data-[highlighted]:bg-red-500/20 data-[highlighted]:outline-none"
+                        >
+                          Remove from this playlist
+                        </Menu.Item>
+                      </Menu.Popup>
+                    </Menu.Positioner>
+                  </Menu.Portal>
+                </Menu.Root>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CreatePlaylistDialog({
+  open,
+  playlistName,
+  onPlaylistNameChange,
+  onOpenChange,
+  onCreatePlaylist,
+}: {
+  open: boolean;
+  playlistName: string;
+  onPlaylistNameChange: (value: string) => void;
+  onOpenChange: (open: boolean) => void;
+  onCreatePlaylist: () => Promise<void>;
+}) {
+  const isValid = playlistName.trim().length > 0;
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-[70]">
+      <button
+        onClick={() => onOpenChange(false)}
+        className="absolute inset-0 bg-black/70"
+        aria-label="Close create playlist modal"
+      />
+
+      <div className="absolute inset-0 flex items-center justify-center p-4">
+        <div className="relative w-full max-w-lg rounded-xl bg-neutral-900 border border-neutral-700 p-6 shadow-2xl">
+          <h2 className="text-2xl font-bold mb-1">Create playlist</h2>
+          <p className="text-neutral-400 mb-6">Give your playlist a name to start building it.</p>
+
+          <label htmlFor="new-playlist-name" className="text-sm text-neutral-400 block mb-2">
+            Playlist name
+          </label>
+          <input
+            id="new-playlist-name"
+            value={playlistName}
+            onChange={(e) => onPlaylistNameChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && isValid) {
+                e.preventDefault();
+                void onCreatePlaylist();
+              }
+            }}
+            placeholder="My Playlist #1"
+            autoFocus
+            className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-white focus:border-green-400 focus:outline-none"
+          />
+
+          <div className="flex flex-wrap gap-2 mt-3">
+            {["Cursor Mix", "Weekend Drive", "Late Night Focus"].map((suggestedName) => (
+              <button
+                key={suggestedName}
+                onClick={() => onPlaylistNameChange(suggestedName)}
+                className="px-3 py-1.5 rounded-full text-xs font-medium bg-neutral-800 text-neutral-200 hover:bg-neutral-700 transition-colors"
+              >
+                {suggestedName}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex justify-end gap-3 mt-8">
+            <button
+              onClick={() => onOpenChange(false)}
+              className="px-4 py-2 rounded-full text-white hover:bg-neutral-800 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => void onCreatePlaylist()}
+              disabled={!isValid}
+              className="px-5 py-2 rounded-full bg-white text-black font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 transition-transform"
+            >
+              Create
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -916,6 +1369,22 @@ function PlaylistIcon() {
   return (
     <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
       <path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM14 11a1 1 0 011 1v1h1a1 1 0 110 2h-1v1a1 1 0 11-2 0v-1h-1a1 1 0 110-2h1v-1a1 1 0 011-1z" />
+    </svg>
+  );
+}
+
+function PlusIcon() {
+  return (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
+
+function MoreIcon() {
+  return (
+    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+      <path d="M3 10a2 2 0 114 0 2 2 0 01-4 0zm5 0a2 2 0 114 0 2 2 0 01-4 0zm5 0a2 2 0 114 0 2 2 0 01-4 0z" />
     </svg>
   );
 }
