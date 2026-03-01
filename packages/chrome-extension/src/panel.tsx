@@ -118,18 +118,23 @@ function Panel() {
   const [state, setState] = createSignal<State>({ status: "loading" });
   let containerRef: HTMLDivElement | undefined;
   let debuggerCleanup: (() => void) | null = null;
+  let connectGeneration = 0;
 
   async function connect() {
+    const generation = ++connectGeneration;
+
     // Cleanup any previous instance
     if (debuggerCleanup) {
       debuggerCleanup();
       debuggerCleanup = null;
     }
-    disposeBridge();
+    await disposeBridge();
+    if (generation !== connectGeneration) return;
 
     setState({ status: "loading" });
 
     const hasDb = await waitForDatabase();
+    if (generation !== connectGeneration) return;
     if (!hasDb) {
       setState({ status: "no-database" });
       return;
@@ -138,8 +143,10 @@ function Panel() {
     try {
       // Initialize the event bridge
       await initBridge();
+      if (generation !== connectGeneration) return;
 
       const remoteDb = await createRemoteDatabase();
+      if (generation !== connectGeneration) return;
       setState({ status: "connected" });
 
       if (containerRef) {
@@ -152,6 +159,7 @@ function Panel() {
         });
       }
     } catch (err) {
+      if (generation !== connectGeneration) return;
       setState({
         status: "error",
         message: err instanceof Error ? err.message : String(err),
@@ -161,14 +169,15 @@ function Panel() {
 
   onMount(() => {
     let lastTheme = getDevToolsTheme();
-    
+
     applyThemeToBody(lastTheme);
-    connect();
+    void connect();
 
     // Listen for page navigation/reload
-    chrome.devtools.network.onNavigated.addListener(() => {
-      connect();
-    });
+    const handleNavigated = () => {
+      void connect();
+    };
+    chrome.devtools.network.onNavigated.addListener(handleNavigated);
 
     // Check for theme changes when panel becomes visible
     // (DevTools was closed and reopened with different theme)
@@ -179,23 +188,25 @@ function Panel() {
           lastTheme = currentTheme;
           applyThemeToBody(currentTheme);
           // Theme changed, reconnect to apply new theme
-          connect();
+          void connect();
         }
       }
     };
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
-    
+
     onCleanup(() => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
+      chrome.devtools.network.onNavigated.removeListener(handleNavigated);
     });
   });
 
   onCleanup(() => {
+    connectGeneration += 1;
     if (debuggerCleanup) {
       debuggerCleanup();
     }
-    disposeBridge();
+    void disposeBridge();
   });
 
   return (
@@ -204,7 +215,7 @@ function Panel() {
         <LoadingScreen />
       </Match>
       <Match when={state().status === "no-database"}>
-        <NoDatabase onRetry={connect} />
+        <NoDatabase onRetry={() => { void connect(); }} />
       </Match>
       <Match when={state().status === "error"}>
         <ErrorScreen message={(state() as { message: string }).message} />
