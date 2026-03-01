@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@base-ui/react": "^1.2.0",
     "@rxdb-debugger/core": "file:../../packages/core",
     "@rxdb-debugger/ui": "file:../../packages/ui",
     "react": "^18.3.1",
