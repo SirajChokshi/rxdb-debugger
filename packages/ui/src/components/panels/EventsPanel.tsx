@@ -28,6 +28,7 @@ export function EventsPanel(props: EventsPanelProps) {
   const [collectionFilter, setCollectionFilter] = createSignal<string | null>(null);
   const [operationFilters, setOperationFilters] = createSignal<Set<OperationType>>(new Set());
   const [collectionNames, setCollectionNames] = createSignal<string[]>([]);
+  let lastRenderedEventId: string | null = null;
 
   const { theme } = props;
 
@@ -59,10 +60,11 @@ export function EventsPanel(props: EventsPanelProps) {
 
   createEffect(() => {
     const event = latestEvent();
-    if (event && !isPaused()) {
-      setEvents((prev) => [event, ...prev].slice(0, 200));
-      setError(null);
-    }
+    if (!event || isPaused()) return;
+    if (event.id === lastRenderedEventId) return;
+    lastRenderedEventId = event.id;
+    setEvents((prev) => [event, ...prev].slice(0, 200));
+    setError(null);
   });
 
   const togglePause = () => {
