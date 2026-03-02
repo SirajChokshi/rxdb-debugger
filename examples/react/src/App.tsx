@@ -84,6 +84,9 @@ interface DbEvent {
 
 type View = "home" | "artists" | "albums" | "songs" | "playlists";
 type DebuggerDock = "bottom" | "right";
+const DEBUGGER_MINIMIZED_SIZE = 44;
+const DEBUGGER_MIN_HEIGHT = 200;
+const DEBUGGER_MIN_WIDTH = 300;
 
 // ============================================================================
 // APP
@@ -109,6 +112,8 @@ export default function App(): JSX.Element {
     return (localStorage.getItem("rxdb-debugger-dock") as DebuggerDock) || "bottom";
   });
   const [isMinimized, setIsMinimized] = useState(false);
+  const [isResizingLayout, setIsResizingLayout] = useState(false);
+  const [allowLayoutTransitions, setAllowLayoutTransitions] = useState(true);
   const [events, setEvents] = useState<DbEvent[]>([]);
 
   const [artists, setArtists] = useState<Artist[]>([]);
@@ -126,7 +131,7 @@ export default function App(): JSX.Element {
 
   const debuggerRef = useRef<HTMLDivElement>(null);
   const debuggerInstanceRef = useRef<RxdbDebugger | null>(null);
-  const isResizing = useRef(false);
+  const isResizingRef = useRef(false);
 
   // Persist debugger state
   useEffect(() => {
@@ -401,26 +406,44 @@ export default function App(): JSX.Element {
     }
   }, [db]);
 
+  const disableLayoutTransitionsTemporarily = useCallback(() => {
+    setAllowLayoutTransitions(false);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setAllowLayoutTransitions(true);
+      });
+    });
+  }, []);
+
+  const handleDebuggerDockToggle = useCallback(() => {
+    disableLayoutTransitionsTemporarily();
+    setDebuggerDock((currentDock) => (currentDock === "bottom" ? "right" : "bottom"));
+  }, [disableLayoutTransitionsTemporarily]);
+
   // Resize handlers
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
-    isResizing.current = true;
+    isResizingRef.current = true;
+    setIsResizingLayout(true);
+    setAllowLayoutTransitions(false);
     document.body.style.cursor = debuggerDock === "bottom" ? "ns-resize" : "ew-resize";
     document.body.style.userSelect = "none";
 
     const handleMouseMove = (e: MouseEvent) => {
-      if (!isResizing.current) return;
+      if (!isResizingRef.current) return;
       if (debuggerDock === "bottom") {
         const newHeight = window.innerHeight - e.clientY;
-        setDebuggerHeight(Math.max(200, Math.min(window.innerHeight - 100, newHeight)));
+        setDebuggerHeight(Math.max(DEBUGGER_MIN_HEIGHT, Math.min(window.innerHeight - 100, newHeight)));
       } else {
         const newWidth = window.innerWidth - e.clientX;
-        setDebuggerWidth(Math.max(300, Math.min(window.innerWidth - 300, newWidth)));
+        setDebuggerWidth(Math.max(DEBUGGER_MIN_WIDTH, Math.min(window.innerWidth - 300, newWidth)));
       }
     };
 
     const handleMouseUp = () => {
-      isResizing.current = false;
+      isResizingRef.current = false;
+      setIsResizingLayout(false);
+      setAllowLayoutTransitions(true);
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
       document.removeEventListener("mousemove", handleMouseMove);
@@ -450,6 +473,20 @@ export default function App(): JSX.Element {
   };
   const totalDocs = stats.artists + stats.albums + stats.songs + stats.playlists + stats.users;
   const recentEvents = events.slice(0, 5);
+  const debuggerReservedWidth =
+    showDebugger && debuggerDock === "right"
+      ? (isMinimized ? DEBUGGER_MINIMIZED_SIZE : debuggerWidth)
+      : 0;
+  const debuggerReservedHeight =
+    showDebugger && debuggerDock === "bottom"
+      ? (isMinimized ? DEBUGGER_MINIMIZED_SIZE : debuggerHeight)
+      : 0;
+  const shouldAnimateLayout = allowLayoutTransitions && !isResizingLayout;
+  const layoutTransition = shouldAnimateLayout ? "margin 0.2s ease-out" : "none";
+  const debuggerPanelTransition = shouldAnimateLayout
+    ? "height 0.2s ease-out, width 0.2s ease-out"
+    : "none";
+  const isRightDockMinimized = debuggerDock === "right" && isMinimized;
 
   if (!db) {
     return (
@@ -548,9 +585,9 @@ export default function App(): JSX.Element {
         <main
           className="flex-1 overflow-y-auto bg-linear-to-b from-neutral-900 to-black"
           style={{
-            marginRight: showDebugger && debuggerDock === "right" ? debuggerWidth : 0,
-            marginBottom: showDebugger && debuggerDock === "bottom" ? (isMinimized ? 44 : debuggerHeight) : 0,
-            transition: isResizing.current ? "none" : "margin 0.2s ease-out"
+            marginRight: debuggerReservedWidth,
+            marginBottom: debuggerReservedHeight,
+            transition: layoutTransition
           }}
         >
           {activeView === "home" && <HomeView artists={artists} albums={albums} songs={songs} onPlaySong={setCurrentSong} onSelectArtist={(a) => { setSelectedArtist(a); setActiveView("artists"); }} />}
@@ -598,9 +635,9 @@ export default function App(): JSX.Element {
         <div
           className="h-20 bg-neutral-900 border-t border-neutral-800 px-4 flex items-center gap-4"
           style={{
-            marginRight: showDebugger && debuggerDock === "right" ? debuggerWidth : 0,
-            marginBottom: showDebugger && debuggerDock === "bottom" ? (isMinimized ? 44 : debuggerHeight) : 0,
-            transition: isResizing.current ? "none" : "margin 0.2s ease-out"
+            marginRight: debuggerReservedWidth,
+            marginBottom: debuggerReservedHeight,
+            transition: layoutTransition
           }}
         >
           <div className="w-14 h-14 bg-neutral-800 rounded overflow-hidden shrink-0">
@@ -658,95 +695,128 @@ export default function App(): JSX.Element {
       {/* Debugger Panel */}
       {showDebugger && (
         <div
-          className={`fixed bg-neutral-950 border-neutral-800 shadow-2xl z-50 flex flex-col transition-all duration-200 ${debuggerDock === "bottom"
+          className={`fixed bg-neutral-950 border-neutral-800 shadow-2xl z-50 flex flex-col ${debuggerDock === "bottom"
             ? "inset-x-0 bottom-0 border-t"
             : "top-0 right-0 bottom-0 border-l"
             }`}
           style={{
-            height: debuggerDock === "bottom" ? (isMinimized ? 44 : debuggerHeight) : "100%",
-            width: debuggerDock === "right" ? debuggerWidth : "100%",
+            height: debuggerDock === "bottom" ? debuggerReservedHeight : "100%",
+            width: debuggerDock === "right" ? debuggerReservedWidth : "100%",
+            transition: debuggerPanelTransition,
           }}
         >
           {/* Resize Handle */}
-          <div
-            onMouseDown={handleResizeStart}
-            className={`absolute bg-transparent hover:bg-orange-500/30 transition-colors ${debuggerDock === "bottom"
-              ? "top-0 left-0 right-0 h-1 cursor-ns-resize"
-              : "top-0 left-0 bottom-0 w-1 cursor-ew-resize"
-              }`}
-          />
+          {!isRightDockMinimized && (
+            <div
+              onMouseDown={handleResizeStart}
+              className={`absolute z-20 bg-transparent hover:bg-orange-500/30 transition-colors ${debuggerDock === "bottom"
+                ? "top-0 left-0 right-0 h-2 cursor-ns-resize"
+                : "top-0 left-0 bottom-0 w-2 cursor-ew-resize"
+                }`}
+            />
+          )}
 
           {/* Header */}
-          <div className="flex items-center justify-between px-3 py-2 border-b border-neutral-800 bg-neutral-900 shrink-0">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2">
-                <span className="text-orange-500">
-                  <TerminalIcon />
-                </span>
-                <span className="font-semibold text-sm">RxDB Debugger</span>
-              </div>
-
-              {/* Quick Stats */}
-              <div className="flex items-center gap-2 text-xs text-neutral-500 border-l border-neutral-700 pl-3 ml-1">
-                <span className="flex items-center gap-1">
-                  <span className="w-2 h-2 bg-green-500 rounded-full" />
-                  {totalDocs} docs
-                </span>
-                {events.length > 0 && (
-                  <span className="flex items-center gap-1 text-yellow-500">
-                    <span className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
-                    {events.length} events
-                  </span>
-                )}
-              </div>
-            </div>
-
-            <div className="flex items-center gap-1">
-              {/* Dock position toggle */}
+          {isRightDockMinimized ? (
+            <div className="flex flex-col items-center gap-1 p-1 border-b border-neutral-800 bg-neutral-900 shrink-0">
               <button
-                onClick={() => setDebuggerDock(debuggerDock === "bottom" ? "right" : "bottom")}
-                className="p-1.5 text-neutral-400 hover:text-white hover:bg-neutral-800 rounded transition-colors"
-                title={debuggerDock === "bottom" ? "Dock to right" : "Dock to bottom"}
+                onClick={() => setIsMinimized(false)}
+                className="p-1.5 text-neutral-300 hover:text-white hover:bg-neutral-800 rounded transition-colors"
+                title="Expand"
               >
-                {debuggerDock === "bottom" ? <DockRightIcon /> : <DockBottomIcon />}
+                <ChevronUpIcon />
               </button>
-
-              {/* Minimize */}
               <button
-                onClick={() => setIsMinimized(!isMinimized)}
-                className="p-1.5 text-neutral-400 hover:text-white hover:bg-neutral-800 rounded transition-colors"
-                title={isMinimized ? "Expand" : "Minimize"}
+                onClick={handleDebuggerDockToggle}
+                className="p-1.5 text-neutral-300 hover:text-white hover:bg-neutral-800 rounded transition-colors"
+                title="Dock to bottom"
               >
-                {isMinimized ? <ChevronUpIcon /> : <ChevronDownIcon />}
+                <DockBottomIcon />
               </button>
-
-              {/* Close */}
               <button
                 onClick={() => setShowDebugger(false)}
-                className="p-1.5 text-neutral-400 hover:text-white hover:bg-neutral-800 rounded transition-colors"
+                className="p-1.5 text-neutral-300 hover:text-white hover:bg-neutral-800 rounded transition-colors"
                 title="Close (Esc)"
               >
                 <CloseIcon />
               </button>
             </div>
-          </div>
+          ) : (
+            <div className="flex items-center justify-between px-3 py-2 border-b border-neutral-800 bg-neutral-900 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-orange-500">
+                    <TerminalIcon />
+                  </span>
+                  <span className="font-semibold text-sm">RxDB Debugger</span>
+                </div>
 
-          {/* Minimized Event Stream */}
-          {isMinimized && recentEvents.length > 0 && (
-            <div className="absolute left-1/2 -translate-x-1/2 top-2 flex items-center gap-2 pointer-events-none">
-              {recentEvents.map((event, i) => (
-                <span
-                  key={event.id}
-                  className={`text-xs px-2 py-0.5 rounded ${event.operation === "INSERT" ? "bg-green-500/20 text-green-400" :
-                    event.operation === "UPDATE" ? "bg-yellow-500/20 text-yellow-400" :
-                      "bg-red-500/20 text-red-400"
-                    }`}
-                  style={{ opacity: 1 - (i * 0.2) }}
+                {/* Quick Stats */}
+                <div className="flex items-center gap-2 text-xs text-neutral-500 border-l border-neutral-700 pl-3 ml-1">
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 bg-green-500 rounded-full" />
+                    {totalDocs} docs
+                  </span>
+                  {events.length > 0 && (
+                    <span className="flex items-center gap-1 text-yellow-500">
+                      <span className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
+                      {events.length} events
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1">
+                {/* Dock position toggle */}
+                <button
+                  onClick={handleDebuggerDockToggle}
+                  className="p-1.5 text-neutral-400 hover:text-white hover:bg-neutral-800 rounded transition-colors"
+                  title={debuggerDock === "bottom" ? "Dock to right" : "Dock to bottom"}
                 >
-                  {event.operation} {event.collection}
-                </span>
-              ))}
+                  {debuggerDock === "bottom" ? <DockRightIcon /> : <DockBottomIcon />}
+                </button>
+
+                {/* Minimize */}
+                <button
+                  onClick={() => setIsMinimized(!isMinimized)}
+                  className="p-1.5 text-neutral-400 hover:text-white hover:bg-neutral-800 rounded transition-colors"
+                  title={isMinimized ? "Expand" : "Minimize"}
+                >
+                  {isMinimized ? <ChevronUpIcon /> : <ChevronDownIcon />}
+                </button>
+
+                {/* Close */}
+                <button
+                  onClick={() => setShowDebugger(false)}
+                  className="p-1.5 text-neutral-400 hover:text-white hover:bg-neutral-800 rounded transition-colors"
+                  title="Close (Esc)"
+                >
+                  <CloseIcon />
+                </button>
+              </div>
             </div>
+          )}
+
+          {!isRightDockMinimized && (
+            <>
+              {/* Minimized Event Stream */}
+              {isMinimized && debuggerDock === "bottom" && recentEvents.length > 0 && (
+                <div className="absolute left-1/2 -translate-x-1/2 top-2 flex items-center gap-2 pointer-events-none">
+                  {recentEvents.map((event, i) => (
+                    <span
+                      key={event.id}
+                      className={`text-xs px-2 py-0.5 rounded ${event.operation === "INSERT" ? "bg-green-500/20 text-green-400" :
+                        event.operation === "UPDATE" ? "bg-yellow-500/20 text-yellow-400" :
+                          "bg-red-500/20 text-red-400"
+                        }`}
+                      style={{ opacity: 1 - (i * 0.2) }}
+                    >
+                      {event.operation} {event.collection}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </>
           )}
 
           {/* Debugger Content */}
