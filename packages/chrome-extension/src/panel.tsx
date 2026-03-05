@@ -1,15 +1,20 @@
-import { createSignal, Match, Switch, onMount, onCleanup } from "solid-js";
+import { For, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js";
 import { render } from "solid-js/web";
 import { mountDebugger } from "@rxdb-debugger/ui";
-import { createRemoteDatabase, waitForDatabase } from "./remote-db";
+import {
+  closeRemoteDatabaseInstance,
+  createRemoteDatabase,
+  listRemoteDatabaseInstances,
+  listRemoteLogicalDatabases,
+  removeRemoteDatabaseInstance,
+  type RemoteDatabaseInstanceInfo,
+  type RemoteLogicalDatabaseInfo,
+  waitForRegistry,
+} from "./remote-db";
 import { initBridge, disposeBridge } from "./bridge";
 import "./styles.css";
 
-type State =
-  | { status: "loading" }
-  | { status: "no-database" }
-  | { status: "error"; message: string }
-  | { status: "connected" };
+type PanelStatus = "loading" | "setup-required" | "empty" | "ready" | "error";
 
 /**
  * Detects the DevTools theme using chrome.devtools.panels.themeName.
@@ -82,19 +87,20 @@ function LoadingScreen() {
   );
 }
 
-function NoDatabase(props: { onRetry: () => void }) {
+function SetupRequired(props: { onRetry: () => void }) {
   const styles = getStyles();
   return (
     <div style={styles.container}>
       <div style={styles.icon}>🔍</div>
-      <h2 style={styles.title}>No RxDB Handle Found</h2>
+      <h2 style={styles.title}>Auto-Discovery Plugin Required</h2>
       <p style={styles.subtitle}>
-        Make sure <code style={styles.code}>window.__rxdb_handle</code> is set
-        to your RxDB database instance.
+        Install the RxDB Debugger auto-discovery plugin before creating your databases.
       </p>
       <pre style={styles.pre}>
-        {`const db = await createRxDatabase({...});
-window.__rxdb_handle = db;`}
+        {`import { addRxPlugin } from "rxdb/plugins/core";
+import { createRxdbDebuggerAutoDiscoveryPlugin } from "@rxdb-debugger/core";
+
+addRxPlugin(createRxdbDebuggerAutoDiscoveryPlugin());`}
       </pre>
       <button style={styles.button} onClick={props.onRetry}>
         Retry
@@ -115,67 +121,226 @@ function ErrorScreen(props: { message: string }) {
 }
 
 function Panel() {
-  const [state, setState] = createSignal<State>({ status: "loading" });
-  let containerRef: HTMLDivElement | undefined;
+  const [status, setStatus] = createSignal<PanelStatus>("loading");
+  const [errorMessage, setErrorMessage] = createSignal("");
+  const [logicalDatabases, setLogicalDatabases] = createSignal<RemoteLogicalDatabaseInfo[]>([]);
+  const [instances, setInstances] = createSignal<RemoteDatabaseInstanceInfo[]>([]);
+  const [selectedLogicalId, setSelectedLogicalId] = createSignal<string | null>(null);
+  const [selectedInstanceId, setSelectedInstanceId] = createSignal<string | null>(null);
+  const [activeInstanceId, setActiveInstanceId] = createSignal<string | null>(null);
+  const [expandedLogicalIds, setExpandedLogicalIds] = createSignal<string[]>([]);
+  const [isBusy, setIsBusy] = createSignal(false);
+
+  let debuggerContainerRef: HTMLDivElement | undefined;
   let debuggerCleanup: (() => void) | null = null;
   let connectGeneration = 0;
 
-  async function connect() {
-    const generation = ++connectGeneration;
+  const selectedLogical = createMemo(() =>
+    logicalDatabases().find((entry) => entry.id === selectedLogicalId()) ?? null
+  );
+  const selectedInstance = createMemo(() =>
+    instances().find((entry) => entry.id === selectedInstanceId()) ?? null
+  );
+  const visibleInstances = createMemo(() => {
+    const selectedId = selectedLogicalId();
+    if (!selectedId) {
+      return [] as RemoteDatabaseInstanceInfo[];
+    }
+    return instances().filter((entry) => entry.logicalDatabaseId === selectedId);
+  });
 
-    // Cleanup any previous instance
+  const isExpanded = (logicalId: string): boolean => {
+    return expandedLogicalIds().includes(logicalId);
+  };
+
+  const toggleExpanded = (logicalId: string): void => {
+    setExpandedLogicalIds((prev) =>
+      prev.includes(logicalId)
+        ? prev.filter((entry) => entry !== logicalId)
+        : [...prev, logicalId]
+    );
+  };
+
+  async function disconnectDebugger(): Promise<void> {
     if (debuggerCleanup) {
       debuggerCleanup();
       debuggerCleanup = null;
     }
+    setActiveInstanceId(null);
     await disposeBridge();
+  }
+
+  function pickInstanceForLogical(
+    logicalId: string,
+    preferredInstanceId: string | null,
+    currentInstances: RemoteDatabaseInstanceInfo[],
+  ): string | null {
+    const scoped = currentInstances.filter((entry) => entry.logicalDatabaseId === logicalId);
+    if (scoped.length === 0) {
+      return null;
+    }
+
+    if (preferredInstanceId) {
+      const preferred = scoped.find((entry) => entry.id === preferredInstanceId);
+      if (preferred && preferred.status === "open") {
+        return preferred.id;
+      }
+    }
+
+    const openInstance = scoped.find((entry) => entry.status === "open");
+    return openInstance?.id ?? null;
+  }
+
+  async function connectToInstance(instanceId: string): Promise<void> {
+    const generation = ++connectGeneration;
+
+    await disconnectDebugger();
     if (generation !== connectGeneration) return;
 
-    setState({ status: "loading" });
+    try {
+      await initBridge(instanceId);
+      if (generation !== connectGeneration) return;
 
-    const hasDb = await waitForDatabase();
-    if (generation !== connectGeneration) return;
-    if (!hasDb) {
-      setState({ status: "no-database" });
+      const remoteDb = await createRemoteDatabase(instanceId);
+      if (generation !== connectGeneration) return;
+
+      if (!debuggerContainerRef) {
+        throw new Error("Debugger container not available");
+      }
+
+      const theme = getDevToolsTheme();
+      debuggerCleanup = mountDebugger({
+        container: debuggerContainerRef,
+        db: remoteDb,
+        theme,
+      });
+      setActiveInstanceId(instanceId);
+      setStatus("ready");
+    } catch (err) {
+      if (generation !== connectGeneration) return;
+      setStatus("error");
+      setErrorMessage(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function refreshInventory(preserveSelection: boolean): Promise<void> {
+    setStatus("loading");
+
+    const hasRegistry = await waitForRegistry();
+    if (!hasRegistry) {
+      await disconnectDebugger();
+      setLogicalDatabases([]);
+      setInstances([]);
+      setSelectedLogicalId(null);
+      setSelectedInstanceId(null);
+      setStatus("setup-required");
       return;
     }
 
-    try {
-      // Initialize the event bridge
-      await initBridge();
-      if (generation !== connectGeneration) return;
+    const nextLogicalDatabases = await listRemoteLogicalDatabases();
+    const nextInstances = await listRemoteDatabaseInstances();
 
-      const remoteDb = await createRemoteDatabase();
-      if (generation !== connectGeneration) return;
-      setState({ status: "connected" });
+    setLogicalDatabases(nextLogicalDatabases);
+    setInstances(nextInstances);
 
-      if (containerRef) {
-        // Use DevTools theme API for extension panels
-        const theme = getDevToolsTheme();
-        debuggerCleanup = mountDebugger({
-          container: containerRef,
-          db: remoteDb,
-          theme,
-        });
-      }
-    } catch (err) {
-      if (generation !== connectGeneration) return;
-      setState({
-        status: "error",
-        message: err instanceof Error ? err.message : String(err),
-      });
+    if (nextLogicalDatabases.length === 0) {
+      await disconnectDebugger();
+      setSelectedLogicalId(null);
+      setSelectedInstanceId(null);
+      setStatus("empty");
+      return;
     }
+
+    const previousLogicalId = preserveSelection ? selectedLogicalId() : null;
+    const nextLogicalId: string = (
+      previousLogicalId
+      && nextLogicalDatabases.some((entry) => entry.id === previousLogicalId)
+    )
+      ? previousLogicalId
+      : nextLogicalDatabases[0]!.id;
+    setSelectedLogicalId(nextLogicalId);
+
+    if (!isExpanded(nextLogicalId)) {
+      setExpandedLogicalIds((prev) => [...new Set([...prev, nextLogicalId])]);
+    }
+
+    const previousInstanceId = preserveSelection ? selectedInstanceId() : null;
+    const nextInstanceId = pickInstanceForLogical(nextLogicalId, previousInstanceId, nextInstances);
+    setSelectedInstanceId(nextInstanceId);
+
+    if (!nextInstanceId) {
+      await disconnectDebugger();
+      setStatus("ready");
+      return;
+    }
+
+    if (activeInstanceId() !== nextInstanceId) {
+      await connectToInstance(nextInstanceId);
+      return;
+    }
+
+    setStatus("ready");
+  }
+
+  async function withBusyAction(action: () => Promise<void>): Promise<void> {
+    if (isBusy()) {
+      return;
+    }
+    setIsBusy(true);
+    try {
+      await action();
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function handleCloseInstance(instanceId: string): Promise<void> {
+    await withBusyAction(async () => {
+      await closeRemoteDatabaseInstance(instanceId);
+      await refreshInventory(true);
+    });
+  }
+
+  async function handleRemoveInstance(instanceId: string): Promise<void> {
+    if (!window.confirm("Remove this database instance and underlying data?")) {
+      return;
+    }
+    await withBusyAction(async () => {
+      await removeRemoteDatabaseInstance(instanceId);
+      await refreshInventory(true);
+    });
+  }
+
+  async function handleSelectLogical(logicalId: string): Promise<void> {
+    setSelectedLogicalId(logicalId);
+    if (!isExpanded(logicalId)) {
+      toggleExpanded(logicalId);
+    }
+    const nextInstanceId = pickInstanceForLogical(logicalId, null, instances());
+    setSelectedInstanceId(nextInstanceId);
+    if (nextInstanceId) {
+      await connectToInstance(nextInstanceId);
+    } else {
+      await disconnectDebugger();
+      setStatus("ready");
+    }
+  }
+
+  async function handleSelectInstance(instanceId: string): Promise<void> {
+    setSelectedInstanceId(instanceId);
+    await connectToInstance(instanceId);
   }
 
   onMount(() => {
     let lastTheme = getDevToolsTheme();
 
     applyThemeToBody(lastTheme);
-    void connect();
+    void refreshInventory(false);
 
     // Listen for page navigation/reload
-    const handleNavigated = () => {
-      void connect();
+    const handleNavigated = async () => {
+      await disconnectDebugger();
+      void refreshInventory(false);
     };
     chrome.devtools.network.onNavigated.addListener(handleNavigated);
 
@@ -187,8 +352,10 @@ function Panel() {
         if (currentTheme !== lastTheme) {
           lastTheme = currentTheme;
           applyThemeToBody(currentTheme);
-          // Theme changed, reconnect to apply new theme
-          void connect();
+          const active = activeInstanceId();
+          if (active) {
+            void connectToInstance(active);
+          }
         }
       }
     };
@@ -203,27 +370,188 @@ function Panel() {
 
   onCleanup(() => {
     connectGeneration += 1;
-    if (debuggerCleanup) {
-      debuggerCleanup();
-    }
-    void disposeBridge();
+    void disconnectDebugger();
   });
 
+  if (status() === "loading") {
+    return <LoadingScreen />;
+  }
+  if (status() === "setup-required") {
+    return <SetupRequired onRetry={() => { void refreshInventory(false); }} />;
+  }
+  if (status() === "error") {
+    return <ErrorScreen message={errorMessage()} />;
+  }
+
+  const isEmpty = status() === "empty";
+
   return (
-    <Switch>
-      <Match when={state().status === "loading"}>
-        <LoadingScreen />
-      </Match>
-      <Match when={state().status === "no-database"}>
-        <NoDatabase onRetry={() => { void connect(); }} />
-      </Match>
-      <Match when={state().status === "error"}>
-        <ErrorScreen message={(state() as { message: string }).message} />
-      </Match>
-      <Match when={state().status === "connected"}>
-        <div ref={containerRef} style="width: 100%; height: 100vh;" />
-      </Match>
-    </Switch>
+    <div style="height:100vh; display:flex; background:var(--color-bg); color:var(--color-text);">
+      <aside
+        style="width:320px; border-right:1px solid var(--color-border); display:flex; flex-direction:column; background:var(--color-bg-secondary);"
+      >
+        <div style="padding:12px; border-bottom:1px solid var(--color-border); display:flex; align-items:center; justify-content:space-between; gap:8px;">
+          <div>
+            <div style="font-size:13px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase;">
+              Database Explorer
+            </div>
+            <div style="font-size:12px; color:var(--color-text-secondary);">
+              {logicalDatabases().length} databases • {instances().length} instances
+            </div>
+          </div>
+          <button
+            style="padding:6px 10px; border:1px solid var(--color-border); border-radius:6px; background:var(--color-bg); color:var(--color-text); cursor:pointer;"
+            onClick={() => { void refreshInventory(true); }}
+            disabled={isBusy()}
+          >
+            Refresh
+          </button>
+        </div>
+
+        <div style="overflow:auto; flex:1; padding:8px;">
+          <Show when={!isEmpty} fallback={
+            <div style="padding:12px; font-size:13px; color:var(--color-text-secondary);">
+              No databases discovered yet. Create a database after installing the auto-discovery plugin.
+            </div>
+          }>
+            <For each={logicalDatabases()}>
+              {(logicalDb) => {
+                const logicalInstances = createMemo(() =>
+                  instances().filter((entry) => entry.logicalDatabaseId === logicalDb.id)
+                );
+                const isSelectedLogical = createMemo(() => selectedLogicalId() === logicalDb.id);
+                return (
+                  <div style="margin-bottom:8px; border:1px solid var(--color-border); border-radius:8px; overflow:hidden;">
+                    <button
+                      onClick={() => { void handleSelectLogical(logicalDb.id); }}
+                      style={`width:100%; text-align:left; border:none; cursor:pointer; padding:10px; display:flex; flex-direction:column; gap:6px; background:${isSelectedLogical() ? "var(--color-bg-selected)" : "var(--color-bg)"}; color:var(--color-text);`}
+                    >
+                      <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+                        <div style="font-weight:600; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                          {logicalDb.name}
+                        </div>
+                        <div
+                          style="font-size:11px; color:var(--color-text-secondary); border:1px solid var(--color-border); border-radius:999px; padding:2px 6px;"
+                        >
+                          {logicalDb.openInstanceCount}/{logicalDb.totalInstanceCount}
+                        </div>
+                      </div>
+                      <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                        <span style="font-size:11px; color:var(--color-text-secondary);">{logicalDb.storageName}</span>
+                        <Show when={logicalDb.hasEncryptedFields || logicalDb.hasEncryptedAttachments}>
+                          <span style="font-size:11px; color:var(--color-warning);">encrypted</span>
+                        </Show>
+                        <span style={`font-size:11px; color:${logicalDb.status === "open" ? "var(--color-success)" : "var(--color-text-secondary)"};`}>
+                          {logicalDb.status}
+                        </span>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => toggleExpanded(logicalDb.id)}
+                      style="width:100%; border:none; border-top:1px solid var(--color-border); background:var(--color-bg-secondary); color:var(--color-text-secondary); cursor:pointer; font-size:11px; padding:4px 8px; text-align:left;"
+                    >
+                      {isExpanded(logicalDb.id) ? "Hide instances" : "Show instances"}
+                    </button>
+
+                    <Show when={isExpanded(logicalDb.id)}>
+                      <div style="padding:8px; background:var(--color-bg-secondary); border-top:1px solid var(--color-border);">
+                        <For each={logicalInstances()}>
+                          {(instance) => {
+                            const isSelectedInstance = createMemo(() => selectedInstanceId() === instance.id);
+                            return (
+                              <div
+                                style={`padding:8px; border:1px solid var(--color-border); border-radius:6px; margin-bottom:6px; background:${isSelectedInstance() ? "var(--color-bg-selected)" : "var(--color-bg)"};`}
+                              >
+                                <button
+                                  onClick={() => { void handleSelectInstance(instance.id); }}
+                                  style="display:flex; width:100%; justify-content:space-between; align-items:center; border:none; background:transparent; color:var(--color-text); cursor:pointer; padding:0;"
+                                >
+                                  <span style="font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                                    {instance.instanceToken}
+                                  </span>
+                                  <span style={`font-size:11px; color:${instance.status === "open" ? "var(--color-success)" : "var(--color-text-secondary)"};`}>
+                                    {instance.status}
+                                  </span>
+                                </button>
+                                <div style="display:flex; gap:6px; margin-top:6px;">
+                                  <button
+                                    onClick={() => { void handleCloseInstance(instance.id); }}
+                                    disabled={isBusy() || instance.status !== "open"}
+                                    style="font-size:11px; border:1px solid var(--color-border); border-radius:4px; background:var(--color-bg-secondary); color:var(--color-text); padding:3px 6px; cursor:pointer;"
+                                  >
+                                    Close
+                                  </button>
+                                  <button
+                                    onClick={() => { void handleRemoveInstance(instance.id); }}
+                                    disabled={isBusy()}
+                                    style="font-size:11px; border:1px solid var(--color-border); border-radius:4px; background:var(--color-bg-secondary); color:var(--color-error); padding:3px 6px; cursor:pointer;"
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          }}
+                        </For>
+                      </div>
+                    </Show>
+                  </div>
+                );
+              }}
+            </For>
+          </Show>
+        </div>
+      </aside>
+
+      <main style="flex:1; display:flex; flex-direction:column; min-width:0;">
+        <div style="padding:10px 12px; border-bottom:1px solid var(--color-border); display:flex; align-items:center; justify-content:space-between; gap:8px;">
+          <div>
+            <div style="font-size:14px; font-weight:600;">
+              {selectedLogical()?.name ?? "No database selected"}
+            </div>
+            <div style="font-size:12px; color:var(--color-text-secondary);">
+              {selectedInstance()
+                ? `Instance ${selectedInstance()!.instanceToken}`
+                : "Select an open instance to inspect"}
+            </div>
+          </div>
+          <div style="display:flex; gap:6px;">
+            <button
+              onClick={() => { void refreshInventory(true); }}
+              disabled={isBusy()}
+              style="padding:6px 10px; border:1px solid var(--color-border); border-radius:6px; background:var(--color-bg-secondary); color:var(--color-text); cursor:pointer;"
+            >
+              Refresh
+            </button>
+            <button
+              onClick={() => { const id = selectedInstanceId(); if (id) { void handleCloseInstance(id); } }}
+              disabled={isBusy() || !selectedInstance() || selectedInstance()!.status !== "open"}
+              style="padding:6px 10px; border:1px solid var(--color-border); border-radius:6px; background:var(--color-bg-secondary); color:var(--color-text); cursor:pointer;"
+            >
+              Close Instance
+            </button>
+            <button
+              onClick={() => { const id = selectedInstanceId(); if (id) { void handleRemoveInstance(id); } }}
+              disabled={isBusy() || !selectedInstance()}
+              style="padding:6px 10px; border:1px solid var(--color-border); border-radius:6px; background:var(--color-bg-secondary); color:var(--color-error); cursor:pointer;"
+            >
+              Remove Database
+            </button>
+          </div>
+        </div>
+
+        <Show when={selectedInstance() && activeInstanceId() === selectedInstanceId()} fallback={
+          <div style="flex:1; display:flex; align-items:center; justify-content:center; color:var(--color-text-secondary); font-size:13px;">
+            {selectedInstance()
+              ? "This instance is not open. Select another instance."
+              : "Select a database instance from the explorer."}
+          </div>
+        }>
+          <div ref={debuggerContainerRef} style="flex:1; min-height:0;" />
+        </Show>
+      </main>
+    </div>
   );
 }
 
