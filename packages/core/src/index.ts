@@ -45,11 +45,22 @@ export {
 } from "./export.js";
 
 export {
+  type BulkWriteDiagnostics,
+  type BulkWriteOperationDetails,
+  type CountDiagnostics,
+  type CountOperationDetails,
+  type FindByIdsDiagnostics,
+  type FindByIdsOperationDetails,
+  type OperationDetails,
   createPerformanceService,
   type OperationLog,
   type OperationTypeName,
+  type PerformanceInsight,
   type PerformanceMetrics,
+  type PerformanceProfile,
   type PerformanceService,
+  type QueryDiagnostics,
+  type QueryOperationDetails,
 } from "./performance.js";
 
 export {

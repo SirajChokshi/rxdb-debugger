@@ -113,7 +113,10 @@ export class RxdbDebugger<T extends RxDatabase = RxDatabase> {
     this._events = createEventsService(this.getDb, eventBufferSize);
     this.events = this._events;
 
-    this._performance = createPerformanceService(performanceLogSize);
+    this._performance = createPerformanceService({
+      maxOperations: performanceLogSize,
+      getDb: this.getDb,
+    });
     this.performance = this._performance;
 
     this.export = createExportService(this.getDb);
@@ -150,7 +153,7 @@ export class RxdbDebugger<T extends RxDatabase = RxDatabase> {
     }
     this._disposed = true;
     this._events.dispose();
-    this._performance.stop();
+    this._performance.dispose();
   }
 
   private checkDisposed(): void {
