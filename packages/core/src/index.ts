@@ -64,6 +64,14 @@ export {
 } from "./performance.js";
 
 export {
+  createReplicationService,
+  type CollectionReplicationSummary,
+  type ReplicationErrorInfo,
+  type ReplicationService,
+  type ReplicationStateSnapshot,
+} from "./replication.js";
+
+export {
   createQuery,
   createStaticQuery,
   type ExplorerQuery,

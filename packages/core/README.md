@@ -8,6 +8,7 @@ A zero-dependency, framework-agnostic debugger for RxDB databases. Provides a he
 - **Document Browser**: List, search, compare, and edit documents with live updates
 - **Query Playground**: Build and test Mango queries with timing and index analysis
 - **Event Stream**: Watch document changes in real-time across all collections
+- **Replication Monitoring**: Inspect replication state, activity, and errors per collection
 - **Performance Tracking**: Auto-instrument RxDB operations with query-plan diagnostics and setup-aware recommendations
 - **Export/Import**: Export collections or entire database to JSON, import data
 
@@ -102,6 +103,7 @@ const debugger = new RxdbDebugger({
 | `schema` | Inspect schemas, properties, indexes, relationships |
 | `query` | Execute and explain Mango queries |
 | `events` | Stream document changes |
+| `replication` | Inspect replication state and sync activity |
 | `performance` | Auto-track storage/query/write performance with diagnostics and insights |
 | `export` | Export/import data as JSON |
 | `metadata` | Database-level information |
@@ -238,6 +240,33 @@ debugger.events.resume();
 debugger.events.clear();
 ```
 
+### ReplicationService
+
+```typescript
+// Snapshot of all replication states
+const states = await debugger.replication.states().get();
+// [
+//   {
+//     collection: "songs",
+//     replicationIdentifier: "mock-songs-sync",
+//     isActive: true,
+//     isInSync: false,
+//     sentCount: 42,
+//     receivedCount: 13,
+//     errorCount: 0,
+//   }
+// ]
+
+// Per-collection summary
+const summaries = await debugger.replication.collectionSummaries().get();
+// [{ collection: "songs", totalStates: 1, totalSent: 42, totalReceived: 13, ... }]
+
+// Control actions
+await debugger.replication.reSync("songs", "mock-songs-sync");
+await debugger.replication.pause("songs", "mock-songs-sync");
+await debugger.replication.start("songs", "mock-songs-sync");
+```
+
 ### PerformanceService
 
 ```typescript
@@ -367,6 +396,7 @@ unmount();
 | **Collections** | Browse collections, view schemas, properties, indexes |
 | **Documents** | List, search, compare documents. Edit/delete if mutations enabled |
 | **Query** | Build and test Mango queries with JSON editor |
+| **Replication** | Monitor replication/sync state, counters, and errors |
 | **Events** | Live stream of document changes with filtering |
 | **Performance** | Operation metrics, slow query analysis |
 | **Export** | Export/import data as JSON files |

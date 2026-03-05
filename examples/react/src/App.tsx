@@ -5,6 +5,7 @@ import { Menu } from "@base-ui/react/menu";
 import {
   getDatabase,
   seedDatabase,
+  setupMockReplications,
   formatDuration,
   formatPlayCount,
 } from "./db";
@@ -74,6 +75,18 @@ interface User {
   subscriptionType: string;
 }
 
+interface FriendPresence {
+  id: string;
+  friendIndex: number;
+  friendName: string;
+  avatarColor: string;
+  currentSongId: string;
+  currentSongTitle: string;
+  currentArtistName: string;
+  status: "listening";
+  updatedAt: number;
+}
+
 interface DbEvent {
   id: string;
   collection: string;
@@ -115,6 +128,9 @@ export default function App(): JSX.Element {
   const [isResizingLayout, setIsResizingLayout] = useState(false);
   const [allowLayoutTransitions, setAllowLayoutTransitions] = useState(true);
   const [events, setEvents] = useState<DbEvent[]>([]);
+  const [isFriendsCollapsed, setIsFriendsCollapsed] = useState(() => {
+    return localStorage.getItem("rxtunes-friends-collapsed") === "true";
+  });
 
   const [artists, setArtists] = useState<Artist[]>([]);
   const [albums, setAlbums] = useState<Album[]>([]);
@@ -122,6 +138,7 @@ export default function App(): JSX.Element {
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [playlistSongs, setPlaylistSongs] = useState<PlaylistSong[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [friendPresence, setFriendPresence] = useState<FriendPresence[]>([]);
 
   const [selectedArtist, setSelectedArtist] = useState<Artist | null>(null);
   const [selectedPlaylistId, setSelectedPlaylistId] = useState<string | null>(null);
@@ -149,6 +166,10 @@ export default function App(): JSX.Element {
   useEffect(() => {
     localStorage.setItem("rxdb-debugger-dock", debuggerDock);
   }, [debuggerDock]);
+
+  useEffect(() => {
+    localStorage.setItem("rxtunes-friends-collapsed", isFriendsCollapsed.toString());
+  }, [isFriendsCollapsed]);
 
   // Keyboard shortcut: Cmd/Ctrl + D to toggle debugger
   useEffect(() => {
@@ -181,11 +202,26 @@ export default function App(): JSX.Element {
     return () => { mounted = false; };
   }, []);
 
+  useEffect(() => {
+    if (!db) return;
+    setupMockReplications(db);
+  }, [db]);
+
   // Subscribe to events for the live counter
   useEffect(() => {
     if (!db) return;
     const subs: { unsubscribe: () => void }[] = [];
-    const collections = ["artists", "albums", "songs", "playlists", "users", "playlistSongs", "userFollows", "userLikes"];
+    const collections = [
+      "artists",
+      "albums",
+      "songs",
+      "playlists",
+      "users",
+      "playlistSongs",
+      "userFollows",
+      "userLikes",
+      "friendPresence",
+    ];
 
     for (const colName of collections) {
       const col = db.collections[colName];
@@ -258,6 +294,17 @@ export default function App(): JSX.Element {
   }, [db]);
 
   useEffect(() => {
+    if (!db) return;
+    const sub = db.collections["friendPresence"]?.find().$.subscribe((docs: unknown[]) => {
+      const next = docs
+        .map((d: unknown) => (d as { toJSON: (flag: boolean) => FriendPresence }).toJSON(true))
+        .sort((a, b) => a.friendIndex - b.friendIndex);
+      setFriendPresence(next);
+    });
+    return () => sub?.unsubscribe();
+  }, [db]);
+
+  useEffect(() => {
     if (!selectedPlaylistId) return;
     if (!playlists.some((playlist) => playlist.id === selectedPlaylistId)) {
       setSelectedPlaylistId(null);
@@ -309,7 +356,17 @@ export default function App(): JSX.Element {
 
   const handleClear = useCallback(async () => {
     if (!db) return;
-    const collections = ["playlistSongs", "userFollows", "userLikes", "playlists", "songs", "albums", "artists", "users"];
+    const collections = [
+      "friendPresence",
+      "playlistSongs",
+      "userFollows",
+      "userLikes",
+      "playlists",
+      "songs",
+      "albums",
+      "artists",
+      "users",
+    ];
     for (const colName of collections) {
       const col = db.collections[colName];
       if (col) {
@@ -324,6 +381,7 @@ export default function App(): JSX.Element {
     setCreatePlaylistOpen(false);
     setNewPlaylistName("");
     setEvents([]);
+    setFriendPresence([]);
   }, [db]);
 
   const handleCreatePlaylist = useCallback(async () => {
@@ -470,8 +528,9 @@ export default function App(): JSX.Element {
     songs: songs.length,
     playlists: playlists.length,
     users: users.length,
+    friendPresence: friendPresence.length,
   };
-  const totalDocs = stats.artists + stats.albums + stats.songs + stats.playlists + stats.users;
+  const totalDocs = stats.artists + stats.albums + stats.songs + stats.playlists + stats.users + stats.friendPresence;
   const recentEvents = events.slice(0, 5);
   const debuggerReservedWidth =
     showDebugger && debuggerDock === "right"
@@ -581,53 +640,60 @@ export default function App(): JSX.Element {
           </div>
         </aside>
 
-        {/* Main Content */}
-        <main
-          className="flex-1 overflow-y-auto bg-linear-to-b from-neutral-900 to-black"
+        <div
+          className="flex flex-1 overflow-hidden"
           style={{
             marginRight: debuggerReservedWidth,
             marginBottom: debuggerReservedHeight,
-            transition: layoutTransition
+            transition: layoutTransition,
           }}
         >
-          {activeView === "home" && <HomeView artists={artists} albums={albums} songs={songs} onPlaySong={setCurrentSong} onSelectArtist={(a) => { setSelectedArtist(a); setActiveView("artists"); }} />}
-          {activeView === "artists" && !selectedArtist && <ArtistsGrid artists={artists} onSelect={setSelectedArtist} />}
-          {activeView === "artists" && selectedArtist && (
-            <ArtistDetail
-              artist={selectedArtist}
-              albums={artistAlbums}
-              songs={artistSongs}
-              onBack={() => setSelectedArtist(null)}
-              onPlaySong={setCurrentSong}
-              currentSong={currentSong}
-            />
-          )}
-          {activeView === "albums" && <AlbumsGrid albums={albums} getArtistName={getArtistName} />}
-          {activeView === "songs" && <SongsView songs={songs} getArtistName={getArtistName} getAlbumTitle={getAlbumTitle} onPlaySong={setCurrentSong} currentSong={currentSong} />}
-          {activeView === "playlists" && !selectedPlaylist && (
-            <PlaylistsView
-              playlists={playlists}
-              users={users}
-              onSelectPlaylist={handleOpenPlaylist}
-              onCreatePlaylist={() => setCreatePlaylistOpen(true)}
-            />
-          )}
-          {activeView === "playlists" && selectedPlaylist && (
-            <PlaylistDetailView
-              playlist={selectedPlaylist}
-              songs={songs}
-              playlistSongs={playlistSongs}
-              getArtistName={getArtistName}
-              getAlbumTitle={getAlbumTitle}
-              getUserName={getUserName}
-              onBack={() => setSelectedPlaylistId(null)}
-              onPlaySong={setCurrentSong}
-              currentSong={currentSong}
-              onAddSongToPlaylist={handleAddSongToPlaylist}
-              onRemoveSongFromPlaylist={handleRemoveSongFromPlaylist}
-            />
-          )}
-        </main>
+          {/* Main Content */}
+          <main className="flex-1 overflow-y-auto bg-linear-to-b from-neutral-900 to-black">
+            {activeView === "home" && <HomeView artists={artists} albums={albums} songs={songs} onPlaySong={setCurrentSong} onSelectArtist={(a) => { setSelectedArtist(a); setActiveView("artists"); }} />}
+            {activeView === "artists" && !selectedArtist && <ArtistsGrid artists={artists} onSelect={setSelectedArtist} />}
+            {activeView === "artists" && selectedArtist && (
+              <ArtistDetail
+                artist={selectedArtist}
+                albums={artistAlbums}
+                songs={artistSongs}
+                onBack={() => setSelectedArtist(null)}
+                onPlaySong={setCurrentSong}
+                currentSong={currentSong}
+              />
+            )}
+            {activeView === "albums" && <AlbumsGrid albums={albums} getArtistName={getArtistName} />}
+            {activeView === "songs" && <SongsView songs={songs} getArtistName={getArtistName} getAlbumTitle={getAlbumTitle} onPlaySong={setCurrentSong} currentSong={currentSong} />}
+            {activeView === "playlists" && !selectedPlaylist && (
+              <PlaylistsView
+                playlists={playlists}
+                users={users}
+                onSelectPlaylist={handleOpenPlaylist}
+                onCreatePlaylist={() => setCreatePlaylistOpen(true)}
+              />
+            )}
+            {activeView === "playlists" && selectedPlaylist && (
+              <PlaylistDetailView
+                playlist={selectedPlaylist}
+                songs={songs}
+                playlistSongs={playlistSongs}
+                getArtistName={getArtistName}
+                getAlbumTitle={getAlbumTitle}
+                getUserName={getUserName}
+                onBack={() => setSelectedPlaylistId(null)}
+                onPlaySong={setCurrentSong}
+                currentSong={currentSong}
+                onAddSongToPlaylist={handleAddSongToPlaylist}
+                onRemoveSongFromPlaylist={handleRemoveSongFromPlaylist}
+              />
+            )}
+          </main>
+          <FriendsSidebar
+            friendPresence={friendPresence}
+            isCollapsed={isFriendsCollapsed}
+            onToggle={() => setIsFriendsCollapsed((prev) => !prev)}
+          />
+        </div>
       </div>
 
       {/* Now Playing Bar */}
@@ -839,6 +905,101 @@ export default function App(): JSX.Element {
 // ============================================================================
 // VIEWS
 // ============================================================================
+
+function formatPresenceRelativeTime(timestamp: number): string {
+  const deltaMs = Date.now() - timestamp;
+  if (deltaMs < 1000) return "just now";
+  const seconds = Math.floor(deltaMs / 1000);
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  return `${Math.floor(minutes / 60)}h ago`;
+}
+
+function FriendsSidebar({
+  friendPresence,
+  isCollapsed,
+  onToggle,
+}: {
+  friendPresence: FriendPresence[];
+  isCollapsed: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <aside
+      className={`border-l border-neutral-900 bg-neutral-950/90 backdrop-blur-sm transition-[width] duration-200 ease-out shrink-0 ${
+        isCollapsed ? "w-11" : "w-72"
+      }`}
+    >
+      <div className="flex items-center justify-between border-b border-neutral-900 px-3 py-3">
+        <button
+          onClick={onToggle}
+          className="w-6 h-6 rounded-full bg-neutral-800 text-neutral-200 hover:bg-neutral-700 transition-colors flex items-center justify-center shrink-0"
+          title={isCollapsed ? "Expand friends activity" : "Collapse friends activity"}
+        >
+          {isCollapsed ? <ChevronLeftIcon /> : <ChevronRightIcon />}
+        </button>
+        {!isCollapsed && (
+          <div className="text-xs uppercase tracking-wider text-neutral-400 font-semibold">
+            Friends Activity
+          </div>
+        )}
+      </div>
+
+      {isCollapsed ? (
+        <div className="flex flex-col items-center gap-2 pt-3">
+          {friendPresence.slice(0, 6).map((friend) => (
+            <div
+              key={friend.id}
+              className="w-7 h-7 rounded-full text-[11px] font-semibold text-white flex items-center justify-center"
+              style={{ backgroundColor: friend.avatarColor }}
+              title={`${friend.friendName}: ${friend.currentSongTitle}`}
+            >
+              {friend.friendName.charAt(0)}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="overflow-y-auto h-[calc(100%-53px)] p-3">
+          {friendPresence.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-neutral-700 p-4 text-xs text-neutral-400">
+              Friend presence data is syncing…
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {friendPresence.map((friend) => (
+                <div
+                  key={friend.id}
+                  className="rounded-lg border border-neutral-800 bg-neutral-900/70 p-3"
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <div
+                      className="w-7 h-7 rounded-full text-[11px] font-semibold text-white flex items-center justify-center"
+                      style={{ backgroundColor: friend.avatarColor }}
+                    >
+                      {friend.friendName.charAt(0)}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-white truncate">
+                        {friend.friendName}
+                      </div>
+                      <div className="text-[11px] text-green-400">Listening now</div>
+                    </div>
+                  </div>
+                  <div className="text-xs text-white truncate">♪ {friend.currentSongTitle}</div>
+                  <div className="text-[11px] text-neutral-400 truncate">{friend.currentArtistName}</div>
+                  <div className="text-[10px] text-neutral-500 mt-1">
+                    Updated {formatPresenceRelativeTime(friend.updatedAt)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </aside>
+  );
+}
 
 function HomeView({ artists, albums, songs, onPlaySong, onSelectArtist }: {
   artists: Artist[];
@@ -1521,6 +1682,22 @@ function ChevronUpIcon() {
   return (
     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
+    </svg>
+  );
+}
+
+function ChevronLeftIcon() {
+  return (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+    </svg>
+  );
+}
+
+function ChevronRightIcon() {
+  return (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
     </svg>
   );
 }

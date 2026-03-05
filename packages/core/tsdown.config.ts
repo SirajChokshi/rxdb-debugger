@@ -5,7 +5,7 @@ export default defineConfig({
   outDir: 'dist',
   format: ['esm'],
   dts: true,
-  external: ['rxdb', 'rxdb/plugins/core', 'rxjs', 'rxjs/operators', 'dexie'],
+  external: ['rxdb', 'rxdb/plugins/core', 'rxdb/plugins/replication', 'rxjs', 'rxjs/operators', 'dexie'],
   platform: 'neutral',
   clean: true,
 })
