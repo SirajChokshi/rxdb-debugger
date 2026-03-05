@@ -5,6 +5,7 @@ import { Menu } from "@base-ui/react/menu";
 import {
   getDatabase,
   seedDatabase,
+  setupMockSongsReplication,
   formatDuration,
   formatPlayCount,
 } from "./db";
@@ -180,6 +181,11 @@ export default function App(): JSX.Element {
     });
     return () => { mounted = false; };
   }, []);
+
+  useEffect(() => {
+    if (!db) return;
+    setupMockSongsReplication(db);
+  }, [db]);
 
   // Subscribe to events for the live counter
   useEffect(() => {

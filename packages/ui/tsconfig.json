@@ -3,7 +3,13 @@
   "compilerOptions": {
     "jsx": "preserve",
     "jsxImportSource": "solid-js",
-    "isolatedDeclarations": false
+    "isolatedDeclarations": false,
+    "baseUrl": ".",
+    "paths": {
+      "@rxdb-debugger/core": [
+        "../core/src/index.ts"
+      ]
+    }
   },
   "include": [
     "src/**/*"

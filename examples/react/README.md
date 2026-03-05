@@ -18,6 +18,7 @@ A React + Vite app demonstrating [RxDB](https://rxdb.info/) with the `@rxdb-debu
 - **Search and filter** - Search by name, filter songs by genre
 - **Event log** - Shows last 50 database change events
 - **Debugger UI** - Full SolidJS-based debugger panel with collections, schema, and performance views
+- **Mock replication sync** - Live `songs` replication with simulated remote updates for debugger demos
 
 ## Data Model
 
@@ -63,6 +64,14 @@ bun run dev
 ```
 
 Open [http://localhost:5173](http://localhost:5173) in your browser.
+
+The example configures a mock replication for the `songs` collection. Open the debugger and use the **Replication** panel to inspect:
+
+- Active/paused replication state
+- Sent and received counters
+- Initial sync and in-sync status
+- Recent replication errors
+- Manual `ReSync` / pause-resume controls
 
 ## Project Structure
 
