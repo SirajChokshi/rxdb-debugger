@@ -94,6 +94,18 @@ export {
 } from "./resolver.js";
 
 export {
+  createRxdbDebuggerAutoDiscoveryPlugin,
+  getRxdbDebuggerRegistry,
+  installRxdbDebuggerAutoDiscovery,
+  type CollectionDiscoveryMetadata,
+  type DatabaseInstanceMetadata,
+  type DatabaseLifecycleStatus,
+  type LogicalDatabaseMetadata,
+  type RxdbDebuggerGlobalRegistry,
+  type RxdbDebuggerRegistrySnapshot,
+} from "./auto-discovery.js";
+
+export {
   createSchemaService,
   type IndexInfo,
   type PropertyInfo,
