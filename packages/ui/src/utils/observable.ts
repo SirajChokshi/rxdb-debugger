@@ -38,11 +38,11 @@ export function fromObservable<T>(
   const { initialValue, onError } = options;
 
   return from<T>((set) => {
-    set(initialValue);
+    set(() => initialValue);
     let subscription: Subscription | null = null;
 
     subscription = observable$.subscribe({
-      next: (value) => set(value),
+      next: (value) => set(() => value),
       error: (err) => {
         if (onError) {
           onError(err);
@@ -105,13 +105,13 @@ export function createObservableSignal<T>(
   const { initialValue, onError } = options;
 
   return from<T>((set) => {
-    set(initialValue);
+    set(() => initialValue);
     let subscription: Subscription | null = null;
 
     try {
       const observable$ = getObservable();
       subscription = observable$.subscribe({
-        next: (value) => set(value),
+        next: (value) => set(() => value),
         error: (err) => {
           if (onError) {
             onError(err);

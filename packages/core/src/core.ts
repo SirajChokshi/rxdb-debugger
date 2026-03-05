@@ -5,6 +5,7 @@ import { createEventsService, type EventsService } from "./events.js";
 import { createExportService, type ExportService } from "./export.js";
 import { createPerformanceService, type PerformanceService } from "./performance.js";
 import { createQueryService, type QueryService } from "./query-playground.js";
+import { createReplicationService, type ReplicationService } from "./replication.js";
 import { createMemoizedResolver, type DbInput } from "./resolver.js";
 import { createSchemaService, type SchemaService } from "./schema.js";
 import { createHistoryService, type HistoryService } from "./history.js";
@@ -90,6 +91,11 @@ export class RxdbDebugger<T extends RxDatabase = RxDatabase> {
   public readonly export: ExportService;
 
   /**
+   * Service for monitoring replication/sync runtime state.
+   */
+  public readonly replication: ReplicationService;
+
+  /**
    * Service for tracking document version history.
    */
   public readonly history: HistoryService;
@@ -117,6 +123,7 @@ export class RxdbDebugger<T extends RxDatabase = RxDatabase> {
     this.performance = this._performance;
 
     this.export = createExportService(this.getDb);
+    this.replication = createReplicationService(this.getDb);
 
     this.history = createHistoryService(this._events);
 
@@ -151,6 +158,7 @@ export class RxdbDebugger<T extends RxDatabase = RxDatabase> {
     this._disposed = true;
     this._events.dispose();
     this._performance.stop();
+    this.replication.dispose();
   }
 
   private checkDisposed(): void {

@@ -12,6 +12,7 @@ import { DocumentsPanel } from "./panels/DocumentsPanel.js";
 import { EventsPanel } from "./panels/EventsPanel.js";
 import { PerformancePanel } from "./panels/PerformancePanel.js";
 import { QueryPanel } from "./panels/QueryPanel.js";
+import { ReplicationPanel } from "./panels/ReplicationPanel.js";
 import { Tabs, type TabItem } from "./shared/Tabs.js";
 
 export type PanelId =
@@ -19,7 +20,8 @@ export type PanelId =
   | "documents"
   | "query"
   | "events"
-  | "performance";
+  | "performance"
+  | "replication";
 
 export interface DebuggerProps {
   debugger: RxdbDebugger;
@@ -42,6 +44,7 @@ const TABS: TabItem[] = [
   { id: "collections", label: "Collections" },
   { id: "documents", label: "Documents" },
   { id: "query", label: "Query" },
+  { id: "replication", label: "Replication" },
   { id: "events", label: "Events" },
   { id: "performance", label: "Performance" },
 ];
@@ -101,6 +104,9 @@ export function Debugger(props: DebuggerProps): JSX.Element {
           </Match>
           <Match when={activeTab() === "query"}>
             <QueryPanel theme={theme()} debugger={props.debugger} />
+          </Match>
+          <Match when={activeTab() === "replication"}>
+            <ReplicationPanel theme={theme()} debugger={props.debugger} />
           </Match>
           <Match when={activeTab() === "performance"}>
             <PerformancePanel theme={theme()} debugger={props.debugger} />
