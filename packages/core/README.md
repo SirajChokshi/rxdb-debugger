@@ -199,6 +199,10 @@ const explanation = await debugger.query.explain("users", {
 // {
 //   usesIndex: true,
 //   indexFields: ["email"],
+//   plannerIndex: ["_deleted", "email", "id"],
+//   selectorSatisfiedByIndex: true,
+//   sortSatisfiedByIndex: true,
+//   hasManualIndex: false,
 //   uncoveredFields: [],
 //   efficiency: "index-only",
 //   suggestions: [],
