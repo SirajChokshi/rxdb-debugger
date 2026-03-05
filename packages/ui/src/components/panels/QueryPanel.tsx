@@ -399,10 +399,40 @@ export function QueryPanel(props: QueryPanelProps) {
                   {exp().usesIndex ? "Yes" : "No"}
                 </span>
               </div>
+              <Show when={exp().hasManualIndex !== undefined}>
+                <div>
+                  <span class="text-text-muted">Manual Index: </span>
+                  <span class={exp().hasManualIndex ? "text-warning" : "text-text-secondary"}>
+                    {exp().hasManualIndex ? "Yes" : "No"}
+                  </span>
+                </div>
+              </Show>
               <Show when={exp().indexFields.length > 0}>
                 <div>
                   <span class="text-text-muted">Index Fields: </span>
                   <span class="font-mono">{exp().indexFields.join(", ")}</span>
+                </div>
+              </Show>
+              <Show when={exp().plannerIndex && exp().plannerIndex.length > 0}>
+                <div>
+                  <span class="text-text-muted">Planner Index: </span>
+                  <span class="font-mono">{exp().plannerIndex?.join(", ")}</span>
+                </div>
+              </Show>
+              <Show when={exp().selectorSatisfiedByIndex !== undefined}>
+                <div>
+                  <span class="text-text-muted">Selector Covered: </span>
+                  <span class={exp().selectorSatisfiedByIndex ? "text-success" : "text-warning"}>
+                    {exp().selectorSatisfiedByIndex ? "Yes" : "No"}
+                  </span>
+                </div>
+              </Show>
+              <Show when={exp().sortSatisfiedByIndex !== undefined}>
+                <div>
+                  <span class="text-text-muted">Sort Covered: </span>
+                  <span class={exp().sortSatisfiedByIndex ? "text-success" : "text-warning"}>
+                    {exp().sortSatisfiedByIndex ? "Yes" : "No"}
+                  </span>
                 </div>
               </Show>
               <Show when={exp().uncoveredFields.length > 0}>

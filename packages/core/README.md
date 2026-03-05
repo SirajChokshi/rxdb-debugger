@@ -9,7 +9,7 @@ A zero-dependency, framework-agnostic debugger for RxDB databases. Provides a he
 - **Query Playground**: Build and test Mango queries with timing and index analysis
 - **Event Stream**: Watch document changes in real-time across all collections
 - **Replication Monitoring**: Inspect replication state, activity, and errors per collection
-- **Performance Tracking**: Monitor operation timing, identify slow queries
+- **Performance Tracking**: Auto-instrument RxDB operations with query-plan diagnostics and setup-aware recommendations
 - **Export/Import**: Export collections or entire database to JSON, import data
 
 ## Installation
@@ -104,7 +104,7 @@ const debugger = new RxdbDebugger({
 | `query` | Execute and explain Mango queries |
 | `events` | Stream document changes |
 | `replication` | Inspect replication state and sync activity |
-| `performance` | Track operation timing and metrics |
+| `performance` | Auto-track storage/query/write performance with diagnostics and insights |
 | `export` | Export/import data as JSON |
 | `metadata` | Database-level information |
 
@@ -201,6 +201,10 @@ const explanation = await debugger.query.explain("users", {
 // {
 //   usesIndex: true,
 //   indexFields: ["email"],
+//   plannerIndex: ["_deleted", "email", "id"],
+//   selectorSatisfiedByIndex: true,
+//   sortSatisfiedByIndex: true,
+//   hasManualIndex: false,
 //   uncoveredFields: [],
 //   efficiency: "index-only",
 //   suggestions: [],
@@ -273,11 +277,37 @@ debugger.performance.start();
 const metrics = await debugger.performance.getMetrics().get();
 // {
 //   totalOperations: 150,
-//   operationsByType: { find: 100, findOne: 30, count: 20 },
+//   operationsByType: { query: 90, count: 30, bulkInsert: 5, update: 25 },
 //   operationsByCollection: { users: 80, posts: 70 },
-//   averageDuration: 5.2,
+//   averageDuration: 5.2,            // ms
+//   operationsPerSecond: 12.4,       // ops/s
+//   latency: { p50: 2.1, p95: 16.8, p99: 45.0, min: 0.8, max: 98.2 },
+//   queryStats: {
+//     totalQueries: 120,
+//     fullScanCandidates: 8,
+//     manualSortCandidates: 3,
+//     slowCounts: 2,
+//     fastCounts: 28
+//   },
+//   writeStats: {
+//     totalWrites: 40,
+//     totalRows: 62,
+//     singleRowWrites: 24,
+//     averageRowsPerWrite: 1.55
+//   },
+//   profile: {
+//     storageName: "dexie",
+//     eventReduce: true,
+//     multiInstance: true,
+//     allowSlowCount: false
+//   },
+//   insights: [{ severity: "warning", title: "...", recommendation: "..." }],
 //   slowestOperations: [...],
 // }
+
+// Get recent operations with diagnostics
+const operations = await debugger.performance.getOperations({ limit: 50 }).get();
+// each operation can include queryPlan/countMode/bulkWrite context diagnostics
 
 // Get slow operations
 const slowOps = await debugger.performance.getSlowOperations(100).get(); // >100ms
@@ -295,6 +325,9 @@ debugger.performance.stop();
 
 // Clear metrics
 debugger.performance.clear();
+
+// Dispose instrumentation
+debugger.performance.dispose();
 ```
 
 ### ExportService

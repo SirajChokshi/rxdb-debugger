@@ -47,6 +47,22 @@ export interface QueryExplanation {
   efficiency: "full-scan" | "partial-index" | "index-only";
   /** Suggestions for improvement */
   suggestions: string[];
+  /** Whether query explicitly sets an index */
+  hasManualIndex?: boolean;
+  /** Index selected by the RxDB query planner */
+  plannerIndex?: string[];
+  /** Whether selector is fully satisfied by index according to runtime query plan */
+  selectorSatisfiedByIndex?: boolean;
+  /** Whether sort is fully satisfied by index according to runtime query plan */
+  sortSatisfiedByIndex?: boolean;
+  /** Query start range bounds from runtime query plan */
+  startKeys?: Array<string | number | undefined>;
+  /** Query end range bounds from runtime query plan */
+  endKeys?: Array<string | number | undefined>;
+  /** Whether start bound is inclusive */
+  inclusiveStart?: boolean;
+  /** Whether end bound is inclusive */
+  inclusiveEnd?: boolean;
 }
 
 /**
@@ -254,8 +270,13 @@ function analyzeQueryEfficiency(
 function generateSuggestions(
   uncoveredFields: string[],
   efficiency: QueryExplanation["efficiency"],
+  options: {
+    sortSatisfiedByIndex?: boolean;
+    hasManualIndex?: boolean;
+  } = {},
 ): string[] {
   const suggestions: string[] = [];
+  const { sortSatisfiedByIndex, hasManualIndex } = options;
 
   if (efficiency === "full-scan") {
     suggestions.push(
@@ -275,7 +296,54 @@ function generateSuggestions(
     );
   }
 
+  if (sortSatisfiedByIndex === false) {
+    suggestions.push(
+      "Sort order is not fully covered by index. Align compound index order with query sort order.",
+    );
+  }
+
+  if (!hasManualIndex) {
+    suggestions.push(
+      "For critical hot-path queries, test explicit query.index values to compare planner choices.",
+    );
+  }
+
   return suggestions;
+}
+
+type RuntimePreparedQuery = {
+  query?: {
+    index?: string[];
+  };
+  queryPlan?: {
+    index?: string[];
+    selectorSatisfiedByIndex?: boolean;
+    sortSatisfiedByIndex?: boolean;
+    startKeys?: Array<string | number | undefined>;
+    endKeys?: Array<string | number | undefined>;
+    inclusiveStart?: boolean;
+    inclusiveEnd?: boolean;
+  };
+};
+
+type QueryWithPrepared = {
+  getPreparedQuery?: () => RuntimePreparedQuery;
+};
+
+function getRuntimePreparedQuery(
+  collection: RxCollection,
+  query: MangoQuery<unknown>,
+): RuntimePreparedQuery | null {
+  const rxQuery = collection.find(query) as unknown as QueryWithPrepared;
+  if (typeof rxQuery.getPreparedQuery !== "function") {
+    return null;
+  }
+
+  try {
+    return rxQuery.getPreparedQuery() ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -429,17 +497,55 @@ export function createQueryService(
 
         const selectorFields = extractSelectorFields(query.selector);
         const analysis = analyzeQueryEfficiency(selectorFields, indexes, primaryKey);
+        const prepared = getRuntimePreparedQuery(collection, query);
+        const plannerIndex = Array.isArray(prepared?.queryPlan?.index)
+          ? prepared?.queryPlan?.index
+          : undefined;
+        const selectorSatisfiedByIndex = prepared?.queryPlan?.selectorSatisfiedByIndex;
+        const sortSatisfiedByIndex = prepared?.queryPlan?.sortSatisfiedByIndex;
+        const hasManualIndex = Array.isArray(prepared?.query?.index) && prepared!.query!.index!.length > 0;
+
+        let usesIndex = analysis.usesIndex;
+        let indexFields = analysis.indexFields;
+        let efficiency = analysis.efficiency;
+
+        if (plannerIndex && plannerIndex.length > 0) {
+          usesIndex = true;
+          indexFields = plannerIndex;
+          if (selectorSatisfiedByIndex === true && sortSatisfiedByIndex === true) {
+            efficiency = "index-only";
+          } else if (selectorSatisfiedByIndex === true) {
+            efficiency = "partial-index";
+          } else if (analysis.efficiency === "index-only") {
+            efficiency = "partial-index";
+          } else {
+            efficiency = "full-scan";
+          }
+        }
+
         const suggestions = generateSuggestions(
           analysis.uncoveredFields,
-          analysis.efficiency,
+          efficiency,
+          {
+            sortSatisfiedByIndex,
+            hasManualIndex,
+          },
         );
 
         return {
-          usesIndex: analysis.usesIndex,
-          indexFields: analysis.indexFields,
+          usesIndex,
+          indexFields,
           uncoveredFields: analysis.uncoveredFields,
-          efficiency: analysis.efficiency,
+          efficiency,
           suggestions,
+          hasManualIndex,
+          plannerIndex,
+          selectorSatisfiedByIndex,
+          sortSatisfiedByIndex,
+          startKeys: prepared?.queryPlan?.startKeys,
+          endKeys: prepared?.queryPlan?.endKeys,
+          inclusiveStart: prepared?.queryPlan?.inclusiveStart,
+          inclusiveEnd: prepared?.queryPlan?.inclusiveEnd,
         };
       });
     },
