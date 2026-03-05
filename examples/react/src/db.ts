@@ -42,13 +42,57 @@ interface MockRemoteSongsStore {
   docs: MockSongDoc[];
 }
 
+interface FriendPresenceCheckpoint {
+  id: string;
+  updatedAt: number;
+}
+
+interface FriendPresenceDoc {
+  id: string;
+  friendIndex: number;
+  friendName: string;
+  avatarColor: string;
+  currentSongId: string;
+  currentSongTitle: string;
+  currentArtistName: string;
+  status: "listening";
+  updatedAt: number;
+  _deleted?: boolean;
+}
+
+type FriendPresencePullStreamEvent =
+  | "RESYNC"
+  | {
+    documents: FriendPresenceDoc[];
+    checkpoint: FriendPresenceCheckpoint | undefined;
+  };
+
+interface MockRemoteFriendPresenceStore {
+  tick: number;
+  docs: FriendPresenceDoc[];
+}
+
 const REMOTE_SONGS_STORAGE_KEY = "rxdb-debugger-mock-remote-songs-v1";
 const SONGS_REPLICATION_IDENTIFIER = "mock-songs-sync";
 const REMOTE_SONG_UPDATE_INTERVAL_MS = 8000;
+const REMOTE_FRIEND_PRESENCE_STORAGE_KEY = "rxdb-debugger-mock-friend-presence-v1";
+const FRIEND_PRESENCE_REPLICATION_IDENTIFIER = "mock-friends-presence-sync";
+const FRIEND_PRESENCE_UPDATE_INTERVAL_MS = 30000;
+const FRIEND_IDENTITIES = [
+  { id: "friend-ava", friendName: "Ava", avatarColor: "#22c55e" },
+  { id: "friend-liam", friendName: "Liam", avatarColor: "#f97316" },
+  { id: "friend-maya", friendName: "Maya", avatarColor: "#a855f7" },
+  { id: "friend-noah", friendName: "Noah", avatarColor: "#06b6d4" },
+  { id: "friend-zoe", friendName: "Zoe", avatarColor: "#eab308" },
+  { id: "friend-leo", friendName: "Leo", avatarColor: "#ef4444" },
+] as const;
 
 const songsPullStream$ = new Subject<MockPullStreamEvent>();
+const friendPresencePullStream$ = new Subject<FriendPresencePullStreamEvent>();
 let songsSyncInterval: ReturnType<typeof setInterval> | null = null;
+let friendPresenceSyncInterval: ReturnType<typeof setInterval> | null = null;
 let songsReplicationStarted = false;
+let friendPresenceReplicationStarted = false;
 
 function compareSongsByCheckpoint(a: SongsCheckpoint, b: SongsCheckpoint): number {
   if (a.updatedAt !== b.updatedAt) {
@@ -175,6 +219,227 @@ function emitRemoteSongChange(doc: MockSongDoc): void {
   });
 }
 
+function compareFriendPresenceByCheckpoint(
+  a: FriendPresenceCheckpoint,
+  b: FriendPresenceCheckpoint,
+): number {
+  if (a.updatedAt !== b.updatedAt) {
+    return a.updatedAt - b.updatedAt;
+  }
+  return a.id.localeCompare(b.id);
+}
+
+function isFriendPresenceAfterCheckpoint(
+  doc: FriendPresenceDoc,
+  checkpoint: FriendPresenceCheckpoint | undefined,
+): boolean {
+  if (!checkpoint) return true;
+  return compareFriendPresenceByCheckpoint(
+    { id: doc.id, updatedAt: doc.updatedAt },
+    checkpoint,
+  ) > 0;
+}
+
+function toFriendPresenceCheckpoint(doc: FriendPresenceDoc): FriendPresenceCheckpoint {
+  return {
+    id: doc.id,
+    updatedAt: doc.updatedAt,
+  };
+}
+
+function cloneFriendPresenceDoc(doc: FriendPresenceDoc): FriendPresenceDoc {
+  return {
+    ...doc,
+    _deleted: !!doc._deleted,
+  };
+}
+
+function normalizeFriendPresenceDoc(data: unknown): FriendPresenceDoc | null {
+  if (typeof data !== "object" || data === null) {
+    return null;
+  }
+
+  const source = data as Record<string, unknown>;
+  if (
+    typeof source.id !== "string"
+    || typeof source.friendIndex !== "number"
+    || typeof source.friendName !== "string"
+    || typeof source.currentSongId !== "string"
+    || typeof source.currentSongTitle !== "string"
+    || typeof source.currentArtistName !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    id: source.id,
+    friendIndex: source.friendIndex,
+    friendName: source.friendName,
+    avatarColor: typeof source.avatarColor === "string" ? source.avatarColor : "#64748b",
+    currentSongId: source.currentSongId,
+    currentSongTitle: source.currentSongTitle,
+    currentArtistName: source.currentArtistName,
+    status: "listening",
+    updatedAt: typeof source.updatedAt === "number" ? source.updatedAt : Date.now(),
+    _deleted: !!source._deleted,
+  };
+}
+
+function normalizeModulo(value: number, length: number): number {
+  return ((value % length) + length) % length;
+}
+
+function getSeedSongByIndex(index: number) {
+  if (SONGS.length === 0) {
+    return {
+      id: "song-missing",
+      title: "Unknown Song",
+      artistId: "artist-missing",
+    };
+  }
+  return SONGS[index % SONGS.length]!;
+}
+
+function getArtistNameById(artistId: string): string {
+  const artist = ARTISTS.find((entry) => entry.id === artistId);
+  return artist?.name ?? "Unknown Artist";
+}
+
+function createDefaultFriendPresenceDocs(now: number): FriendPresenceDoc[] {
+  return FRIEND_IDENTITIES.map((friend, index) => {
+    const seedSong = getSeedSongByIndex(index * 3 + 1);
+    return {
+      id: friend.id,
+      friendIndex: index,
+      friendName: friend.friendName,
+      avatarColor: friend.avatarColor,
+      currentSongId: seedSong.id,
+      currentSongTitle: seedSong.title,
+      currentArtistName: getArtistNameById(seedSong.artistId),
+      status: "listening",
+      updatedAt: now - index * 1000,
+      _deleted: false,
+    };
+  });
+}
+
+function loadRemoteFriendPresenceStore(): MockRemoteFriendPresenceStore {
+  const now = Date.now();
+  if (typeof localStorage === "undefined") {
+    return {
+      tick: 0,
+      docs: createDefaultFriendPresenceDocs(now),
+    };
+  }
+
+  try {
+    const raw = localStorage.getItem(REMOTE_FRIEND_PRESENCE_STORAGE_KEY);
+    if (!raw) {
+      const initialStore: MockRemoteFriendPresenceStore = {
+        tick: 0,
+        docs: createDefaultFriendPresenceDocs(now),
+      };
+      saveRemoteFriendPresenceStore(initialStore);
+      return initialStore;
+    }
+
+    const parsed = JSON.parse(raw) as { tick?: unknown; docs?: unknown };
+    const docs = Array.isArray(parsed.docs)
+      ? parsed.docs
+        .map(normalizeFriendPresenceDoc)
+        .filter((doc): doc is FriendPresenceDoc => !!doc)
+        .sort((a, b) =>
+          compareFriendPresenceByCheckpoint(
+            toFriendPresenceCheckpoint(a),
+            toFriendPresenceCheckpoint(b),
+          ))
+      : [];
+
+    if (docs.length === 0) {
+      const fallbackStore: MockRemoteFriendPresenceStore = {
+        tick: typeof parsed.tick === "number" ? parsed.tick : 0,
+        docs: createDefaultFriendPresenceDocs(now),
+      };
+      saveRemoteFriendPresenceStore(fallbackStore);
+      return fallbackStore;
+    }
+
+    return {
+      tick: typeof parsed.tick === "number" ? parsed.tick : 0,
+      docs,
+    };
+  } catch {
+    const fallbackStore: MockRemoteFriendPresenceStore = {
+      tick: 0,
+      docs: createDefaultFriendPresenceDocs(now),
+    };
+    saveRemoteFriendPresenceStore(fallbackStore);
+    return fallbackStore;
+  }
+}
+
+function saveRemoteFriendPresenceStore(store: MockRemoteFriendPresenceStore): void {
+  if (typeof localStorage === "undefined") {
+    return;
+  }
+
+  localStorage.setItem(
+    REMOTE_FRIEND_PRESENCE_STORAGE_KEY,
+    JSON.stringify({
+      tick: store.tick,
+      docs: store.docs.map(cloneFriendPresenceDoc),
+    }),
+  );
+}
+
+function emitFriendPresenceChanges(docs: FriendPresenceDoc[]): void {
+  if (docs.length === 0) {
+    return;
+  }
+
+  const sorted = [...docs].sort((a, b) =>
+    compareFriendPresenceByCheckpoint(
+      toFriendPresenceCheckpoint(a),
+      toFriendPresenceCheckpoint(b),
+    ));
+
+  friendPresencePullStream$.next({
+    documents: sorted.map(cloneFriendPresenceDoc),
+    checkpoint: toFriendPresenceCheckpoint(sorted[sorted.length - 1]!),
+  });
+}
+
+function runFriendPresenceMutationTick(): void {
+  const now = Date.now();
+  const store = loadRemoteFriendPresenceStore();
+  store.tick += 1;
+
+  const updatedDocs = store.docs.map((doc) => {
+    const deterministicNoise = Math.floor(
+      Math.abs(Math.sin((store.tick + 1) * (doc.friendIndex + 2))) * 1000
+    );
+    const songPoolSize = Math.max(SONGS.length, 1);
+    const songIndex = normalizeModulo(
+      store.tick * 5 + doc.friendIndex * 11 + deterministicNoise,
+      songPoolSize,
+    );
+    const nextSong = getSeedSongByIndex(songIndex);
+
+    return {
+      ...doc,
+      currentSongId: nextSong.id,
+      currentSongTitle: nextSong.title,
+      currentArtistName: getArtistNameById(nextSong.artistId),
+      updatedAt: now + doc.friendIndex,
+      _deleted: false,
+    };
+  });
+
+  store.docs = updatedDocs;
+  saveRemoteFriendPresenceStore(store);
+  emitFriendPresenceChanges(updatedDocs);
+}
+
 function runRemoteSongMutationTick(): void {
   const store = loadRemoteSongsStore();
   const activeDocs = store.docs.filter((doc) => !doc._deleted);
@@ -270,6 +535,60 @@ export function setupMockSongsReplication(db: RxDatabase): void {
   if (!songsSyncInterval) {
     songsSyncInterval = setInterval(runRemoteSongMutationTick, REMOTE_SONG_UPDATE_INTERVAL_MS);
   }
+}
+
+export function setupMockFriendPresenceReplication(db: RxDatabase): void {
+  if (friendPresenceReplicationStarted) {
+    return;
+  }
+
+  const friendPresenceCollection = db.collections.friendPresence;
+  if (!friendPresenceCollection) {
+    return;
+  }
+
+  friendPresenceReplicationStarted = true;
+
+  replicateRxCollection<FriendPresenceDoc, FriendPresenceCheckpoint>({
+    collection: friendPresenceCollection as unknown as never,
+    replicationIdentifier: FRIEND_PRESENCE_REPLICATION_IDENTIFIER,
+    live: true,
+    waitForLeadership: false,
+    retryTime: 2000,
+    pull: {
+      batchSize: 20,
+      handler: async (checkpoint, batchSize) => {
+        const store = loadRemoteFriendPresenceStore();
+        const docs = store.docs
+          .filter((doc) => isFriendPresenceAfterCheckpoint(doc, checkpoint))
+          .sort((a, b) =>
+            compareFriendPresenceByCheckpoint(
+              toFriendPresenceCheckpoint(a),
+              toFriendPresenceCheckpoint(b),
+            ))
+          .slice(0, batchSize)
+          .map(cloneFriendPresenceDoc);
+
+        return {
+          documents: docs,
+          checkpoint: docs.length > 0 ? toFriendPresenceCheckpoint(docs[docs.length - 1]!) : checkpoint,
+        };
+      },
+      stream$: friendPresencePullStream$.asObservable(),
+    },
+  });
+
+  if (!friendPresenceSyncInterval) {
+    friendPresenceSyncInterval = setInterval(
+      runFriendPresenceMutationTick,
+      FRIEND_PRESENCE_UPDATE_INTERVAL_MS,
+    );
+  }
+}
+
+export function setupMockReplications(db: RxDatabase): void {
+  setupMockSongsReplication(db);
+  setupMockFriendPresenceReplication(db);
 }
 
 // ============================================================================
@@ -414,6 +733,34 @@ const userLikeSchema = {
   required: ["id", "userId", "songId", "likedAt"],
 } as const;
 
+const friendPresenceSchema = {
+  version: 0,
+  primaryKey: "id",
+  type: "object",
+  properties: {
+    id: { type: "string", maxLength: 100 },
+    friendIndex: { type: "integer" },
+    friendName: { type: "string" },
+    avatarColor: { type: "string" },
+    currentSongId: { type: "string", ref: "songs" },
+    currentSongTitle: { type: "string" },
+    currentArtistName: { type: "string" },
+    status: { type: "string", enum: ["listening"] },
+    updatedAt: { type: "number" },
+  },
+  required: [
+    "id",
+    "friendIndex",
+    "friendName",
+    "avatarColor",
+    "currentSongId",
+    "currentSongTitle",
+    "currentArtistName",
+    "status",
+    "updatedAt",
+  ],
+} as const;
+
 // ============================================================================
 // DATABASE INITIALIZATION
 // ============================================================================
@@ -435,6 +782,7 @@ export function getDatabase(): Promise<RxDatabase> {
         playlistSongs: { schema: playlistSongSchema },
         userFollows: { schema: userFollowSchema },
         userLikes: { schema: userLikeSchema },
+        friendPresence: { schema: friendPresenceSchema },
       });
 
       // Expose for Chrome extension debugging

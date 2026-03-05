@@ -59,6 +59,8 @@ export function ReplicationPanel(props: ReplicationPanelProps) {
   const [queryError, setQueryError] = createSignal<string | null>(null);
   const [actionError, setActionError] = createSignal<string | null>(null);
   const [searchQuery, setSearchQuery] = createSignal("");
+  const [showOnlyWithStates, setShowOnlyWithStates] = createSignal(true);
+  const [focusIssuesOnly, setFocusIssuesOnly] = createSignal(false);
   const [selectedCollection, setSelectedCollection] = createSignal<string | null>(null);
   const [selectedStateId, setSelectedStateId] = createSignal<string | null>(null);
   const [isRunningAction, setIsRunningAction] = createSignal(false);
@@ -83,8 +85,23 @@ export function ReplicationPanel(props: ReplicationPanelProps) {
 
   const filteredSummaries = createMemo(() => {
     const query = searchQuery().trim().toLowerCase();
-    if (!query) return summaries();
-    return summaries().filter((summary) => summary.collection.toLowerCase().includes(query));
+    return summaries().filter((summary) => {
+      if (showOnlyWithStates() && summary.totalStates === 0) {
+        return false;
+      }
+      if (
+        focusIssuesOnly()
+        && summary.totalErrors === 0
+        && !summary.hasOutOfSyncStates
+        && !summary.hasInitialReplicationPending
+      ) {
+        return false;
+      }
+      if (query && !summary.collection.toLowerCase().includes(query)) {
+        return false;
+      }
+      return true;
+    });
   });
 
   const selectedCollectionSummary = createMemo(() =>
@@ -165,6 +182,28 @@ export function ReplicationPanel(props: ReplicationPanelProps) {
         <div class="font-semibold text-[11px] uppercase tracking-wider text-text-muted">
           Replication Collections
         </div>
+        <div class="flex flex-row gap-1 flex-wrap">
+          <button
+            class={`px-[var(--spacing-xs)] py-0.5 rounded-sm text-[10px] border ${
+              showOnlyWithStates()
+                ? "bg-accent/20 text-accent border-accent/40"
+                : "bg-bg-secondary text-text-muted border-border"
+            }`}
+            onClick={() => setShowOnlyWithStates((prev) => !prev)}
+          >
+            Active states only
+          </button>
+          <button
+            class={`px-[var(--spacing-xs)] py-0.5 rounded-sm text-[10px] border ${
+              focusIssuesOnly()
+                ? "bg-warning/20 text-warning border-warning/40"
+                : "bg-bg-secondary text-text-muted border-border"
+            }`}
+            onClick={() => setFocusIssuesOnly((prev) => !prev)}
+          >
+            Focus issues
+          </button>
+        </div>
         <input
           class="px-[var(--spacing-sm)] py-[var(--spacing-xs)] bg-bg-secondary text-text border border-border rounded-[var(--radius)] text-xs outline-none w-full"
           placeholder="Search collections..."
@@ -188,7 +227,7 @@ export function ReplicationPanel(props: ReplicationPanelProps) {
 
         <Show when={!queryError() && summaries().length > 0 && filteredSummaries().length === 0}>
           <div class="p-[var(--spacing-xl)] text-center text-text-muted">
-            No collections match your search.
+            No collections match the current filters.
           </div>
         </Show>
 
