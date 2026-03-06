@@ -78,6 +78,32 @@ const unmount = mountDebugger({
 unmount();
 ```
 
+### Chrome Extension Auto-Discovery (No Manual Window Handles)
+
+To let the DevTools extension discover and manage all RxDB databases automatically, install the auto-discovery plugin once before creating databases:
+
+```typescript
+import { addRxPlugin } from "rxdb/plugins/core";
+import { createRxdbDebuggerAutoDiscoveryPlugin } from "rxdb-debugger";
+
+addRxPlugin(createRxdbDebuggerAutoDiscoveryPlugin());
+```
+
+If you prefer a helper that is safe to call more than once:
+
+```typescript
+import { installRxdbDebuggerAutoDiscovery } from "rxdb-debugger";
+
+installRxdbDebuggerAutoDiscovery();
+```
+
+With auto-discovery enabled, the extension can:
+- detect multiple logical databases
+- show multiple active instances/handles per database
+- close/remove databases from the explorer UI
+
+No `window.__rxdb_handle` assignment is required.
+
 ## API Reference
 
 ### RxdbDebugger

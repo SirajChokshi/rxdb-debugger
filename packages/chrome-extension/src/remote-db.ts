@@ -87,15 +87,19 @@ function wrapDocument(data: Record<string, unknown>, collectionRef: { schema: { 
 }
 
 async function getRegistrySnapshot(): Promise<RegistrySnapshot | null> {
-  return evalInPage<RegistrySnapshot | null>(`
-    (function () {
-      const registry = window.__RXDB_DEBUGGER__;
-      if (!registry || typeof registry.snapshot !== "function") {
-        return null;
-      }
-      return registry.snapshot();
-    })()
-  `);
+  try {
+    return await evalInPage<RegistrySnapshot | null>(`
+      (function () {
+        const registry = window.__RXDB_DEBUGGER__;
+        if (!registry || typeof registry.snapshot !== "function") {
+          return null;
+        }
+        return registry.snapshot();
+      })()
+    `);
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -385,7 +389,7 @@ function createRemoteFindOne(
 /**
  * Check if the page has a debugger auto-discovery registry exposed.
  */
-export async function waitForRegistry(maxAttempts = 20): Promise<boolean> {
+export async function waitForRegistry(maxAttempts = 8): Promise<boolean> {
   for (let i = 0; i < maxAttempts; i++) {
     try {
       const hasRegistry = await evalInPage<boolean>(
@@ -395,7 +399,7 @@ export async function waitForRegistry(maxAttempts = 20): Promise<boolean> {
     } catch {
       // Continue waiting
     }
-    await new Promise((r) => setTimeout(r, 500));
+    await new Promise((r) => setTimeout(r, 250));
   }
   return false;
 }

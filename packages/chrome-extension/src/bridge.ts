@@ -42,6 +42,7 @@ const BRIDGE_CHANNEL = "RXDB_DEBUGGER_BRIDGE";
 const BRIDGE_TIMEOUT_MS = 15000;
 const HEARTBEAT_INTERVAL_MS = 5000;
 const COLLECTION_POLL_INTERVAL_MS = 2000;
+const EVAL_TIMEOUT_MS = 300;
 
 const bridgeEventTypes = new Set<BridgeEventType>([
   "RXDB_CHANGE",
@@ -55,7 +56,12 @@ const bridgeEventTypes = new Set<BridgeEventType>([
  */
 export function evalInPage<T>(expression: string): Promise<T> {
   return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      reject(new Error("Eval timed out"));
+    }, EVAL_TIMEOUT_MS);
+
     chrome.devtools.inspectedWindow.eval(expression, (result, exceptionInfo) => {
+      clearTimeout(timeoutId);
       if (exceptionInfo) {
         reject(new Error(exceptionInfo.value || "Eval failed"));
       } else {
@@ -211,18 +217,12 @@ export async function initBridge(instanceId: string): Promise<void> {
   activeSessionId = sessionId;
 
   try {
-    attachRuntimeMessageListener(sessionId);
-
-    // Inject the content script relay
-    await injectContentScriptRelay(sessionId);
-
     // Inject the page-context bridge
     await injectPageBridge(sessionId, instanceId);
 
     // Start heartbeat to keep page bridge alive
     startHeartbeat(sessionId);
   } catch (error) {
-    removeRuntimeMessageListener();
     activeSessionId = null;
     bridgeInitialized = false;
     throw error;
@@ -330,7 +330,8 @@ async function injectPageBridge(sessionId: string, instanceId: string): Promise<
           intervalId: null,
           heartbeat: 0,
           lastCollections: '',
-          lastDatabaseToken: ''
+          lastDatabaseToken: '',
+          eventQueue: []
         };
         root.__rxdb_debugger_bridge_state = state;
       }
@@ -370,14 +371,10 @@ async function injectPageBridge(sessionId: string, instanceId: string): Promise<
       state.lastDatabaseToken = '';
 
       function emit(type, payload) {
-        root.postMessage({
-          channel: channel,
-          sessionId: sessionId,
-          event: {
-            type: type,
-            payload: payload
-          }
-        }, '*');
+        state.eventQueue.push({
+          type: type,
+          payload: payload
+        });
       }
 
       function getActiveDatabase() {
@@ -472,12 +469,27 @@ function startHeartbeat(sessionId: string): void {
     evalInPage(`
       (function() {
         var state = window.__rxdb_debugger_bridge_state;
-        if (!state || state.sessionId !== ${sessionLiteral}) return;
+        if (!state || state.sessionId !== ${sessionLiteral}) return [];
         state.heartbeat = Date.now();
+        if (!Array.isArray(state.eventQueue) || state.eventQueue.length === 0) return [];
+        var events = state.eventQueue.slice();
+        state.eventQueue.length = 0;
+        return events;
       })();
-    `).catch(() => {
+    `)
+      .then((events) => {
+        if (!Array.isArray(events)) {
+          return;
+        }
+        for (const event of events) {
+          if (isBridgeEvent(event)) {
+            bridgeSubject?.next(event);
+          }
+        }
+      })
+      .catch(() => {
       // Page may have navigated, ignore
-    });
+      });
   }, HEARTBEAT_INTERVAL_MS);
 }
 
@@ -490,7 +502,6 @@ export async function disposeBridge(): Promise<void> {
     heartbeatInterval = null;
   }
 
-  removeRuntimeMessageListener();
   const sessionId = activeSessionId;
   activeSessionId = null;
 
@@ -528,6 +539,7 @@ export async function disposeBridge(): Promise<void> {
       state.heartbeat = 0;
       state.lastCollections = '';
       state.lastDatabaseToken = '';
+      state.eventQueue = [];
     })();
   `).catch(() => {
     // Page may have navigated, ignore

@@ -226,60 +226,66 @@ function Panel() {
   async function refreshInventory(preserveSelection: boolean): Promise<void> {
     setStatus("loading");
 
-    const hasRegistry = await waitForRegistry();
-    if (!hasRegistry) {
-      await disconnectDebugger();
-      setLogicalDatabases([]);
-      setInstances([]);
-      setSelectedLogicalId(null);
-      setSelectedInstanceId(null);
-      setStatus("setup-required");
-      return;
-    }
+    try {
+      const hasRegistry = await waitForRegistry();
+      if (!hasRegistry) {
+        await disconnectDebugger();
+        setLogicalDatabases([]);
+        setInstances([]);
+        setSelectedLogicalId(null);
+        setSelectedInstanceId(null);
+        setStatus("setup-required");
+        return;
+      }
 
-    const nextLogicalDatabases = await listRemoteLogicalDatabases();
-    const nextInstances = await listRemoteDatabaseInstances();
+      const nextLogicalDatabases = await listRemoteLogicalDatabases();
+      const nextInstances = await listRemoteDatabaseInstances();
 
-    setLogicalDatabases(nextLogicalDatabases);
-    setInstances(nextInstances);
+      setLogicalDatabases(nextLogicalDatabases);
+      setInstances(nextInstances);
 
-    if (nextLogicalDatabases.length === 0) {
-      await disconnectDebugger();
-      setSelectedLogicalId(null);
-      setSelectedInstanceId(null);
-      setStatus("empty");
-      return;
-    }
+      if (nextLogicalDatabases.length === 0) {
+        await disconnectDebugger();
+        setSelectedLogicalId(null);
+        setSelectedInstanceId(null);
+        setStatus("empty");
+        return;
+      }
 
-    const previousLogicalId = preserveSelection ? selectedLogicalId() : null;
-    const nextLogicalId: string = (
-      previousLogicalId
-      && nextLogicalDatabases.some((entry) => entry.id === previousLogicalId)
-    )
-      ? previousLogicalId
-      : nextLogicalDatabases[0]!.id;
-    setSelectedLogicalId(nextLogicalId);
+      const previousLogicalId = preserveSelection ? selectedLogicalId() : null;
+      const nextLogicalId: string = (
+        previousLogicalId
+        && nextLogicalDatabases.some((entry) => entry.id === previousLogicalId)
+      )
+        ? previousLogicalId
+        : nextLogicalDatabases[0]!.id;
+      setSelectedLogicalId(nextLogicalId);
 
-    if (!isExpanded(nextLogicalId)) {
-      setExpandedLogicalIds((prev) => [...new Set([...prev, nextLogicalId])]);
-    }
+      if (!isExpanded(nextLogicalId)) {
+        setExpandedLogicalIds((prev) => [...new Set([...prev, nextLogicalId])]);
+      }
 
-    const previousInstanceId = preserveSelection ? selectedInstanceId() : null;
-    const nextInstanceId = pickInstanceForLogical(nextLogicalId, previousInstanceId, nextInstances);
-    setSelectedInstanceId(nextInstanceId);
+      const previousInstanceId = preserveSelection ? selectedInstanceId() : null;
+      const nextInstanceId = pickInstanceForLogical(nextLogicalId, previousInstanceId, nextInstances);
+      setSelectedInstanceId(nextInstanceId);
 
-    if (!nextInstanceId) {
-      await disconnectDebugger();
+      if (!nextInstanceId) {
+        await disconnectDebugger();
+        setStatus("ready");
+        return;
+      }
+
+      if (activeInstanceId() !== nextInstanceId) {
+        await connectToInstance(nextInstanceId);
+        return;
+      }
+
       setStatus("ready");
-      return;
+    } catch (error) {
+      await disconnectDebugger();
+      setStatus("error");
+      setErrorMessage(error instanceof Error ? error.message : String(error));
     }
-
-    if (activeInstanceId() !== nextInstanceId) {
-      await connectToInstance(nextInstanceId);
-      return;
-    }
-
-    setStatus("ready");
   }
 
   async function withBusyAction(action: () => Promise<void>): Promise<void> {

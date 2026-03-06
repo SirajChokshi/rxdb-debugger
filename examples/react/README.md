@@ -77,6 +77,18 @@ The example configures mock replication for `songs` and `friendPresence`. Open t
 
 The right-side friends rail updates every ~30 seconds using replicated presence documents.
 
+## Chrome DevTools Extension Integration
+
+This example installs the RxDB Debugger auto-discovery plugin at startup via:
+
+```ts
+installRxdbDebuggerAutoDiscovery();
+```
+
+That means the extension can discover databases and instances automatically, without assigning a database to `window`.
+
+If you open multiple handles to the same underlying database, the extension groups them under one logical database and shows each handle as a separate instance.
+
 ## Project Structure
 
 ```

@@ -1,10 +1,13 @@
 import { createRxDatabase, type RxDatabase } from "rxdb";
 import { replicateRxCollection } from "rxdb/plugins/replication";
 import { getRxStorageDexie } from "rxdb/plugins/storage-dexie";
+import { installRxdbDebuggerAutoDiscovery } from "@rxdb-debugger/core";
 import { Subject } from "rxjs";
 import { ARTISTS, ALBUMS, SONGS, USERS, PLAYLISTS, PLAYLIST_SONGS } from "./data/index.js";
 
 export { ARTISTS, ALBUMS, SONGS, USERS, PLAYLISTS, PLAYLIST_SONGS };
+
+installRxdbDebuggerAutoDiscovery();
 
 // ============================================================================
 // MOCK SONGS REPLICATION
@@ -784,9 +787,6 @@ export function getDatabase(): Promise<RxDatabase> {
         userLikes: { schema: userLikeSchema },
         friendPresence: { schema: friendPresenceSchema },
       });
-
-      // Expose for Chrome extension debugging
-      (window as unknown as { __rxdb_handle: RxDatabase }).__rxdb_handle = db;
 
       return db;
     });
