@@ -9,18 +9,18 @@ A React + Vite app demonstrating [RxDB](https://rxdb.info/) with the `@rxdb-debu
   - `artists` - 18 real artists (The Beatles, Pink Floyd, Kendrick Lamar, Taylor Swift, etc.)
   - `albums` - 35 real albums spanning 1965-2022
   - `songs` - 62 real tracks with play counts
-  - `users` - 5 demo users with subscription types
+  - `users` - 7 demo users with profile data and `nowPlayingSongId` refs into `songs`
   - `playlists` - 6 curated playlists (owned by users)
   - `playlistSongs` - Junction table linking playlists to songs
   - `userFollows` - Users following artists
   - `userLikes` - Users liking songs
-  - `friendPresence` - Mock realtime friend listening status
+  - `userFriends` - User-to-user edges for the friends activity graph
 - **Live reactive queries** - All data updates in real-time
 - **Search and filter** - Search by name, filter songs by genre
 - **Event log** - Shows last 50 database change events
 - **Debugger UI** - Full SolidJS-based debugger panel with collections, schema, and performance views
-- **Mock replication sync** - Live `songs` and `friendPresence` replication with simulated remote updates for debugger demos
-- **Collapsible friends rail** - Right-side panel showing what 6 fake friends are currently listening to
+- **Mock replication sync** - Live `songs` and `users` replication with simulated remote updates for debugger demos
+- **Collapsible friends rail** - Right-side panel derived from `userFriends -> users -> songs -> artists`
 
 ## Data Model
 
@@ -29,12 +29,15 @@ A React + Vite app demonstrating [RxDB](https://rxdb.info/) with the `@rxdb-debu
 │ artists │◄────┤ albums  │◄────┤  songs  │
 └────┬────┘     └─────────┘     └────┬────┘
      │                               │
-     │ userFollows                   │ userLikes
+     │ userFollows                   │ userLikes / nowPlayingSongId
      │                               │
      ▼                               ▼
-┌─────────┐     ┌───────────┐   ┌──────────────┐
-│  users  │◄────┤ playlists │◄──┤playlistSongs │
-└─────────┘     └───────────┘   └──────────────┘
+┌─────────┐◄────┐   ┌───────────┐   ┌──────────────┐
+│  users  │◄──┐ │   │ playlists │◄──┤playlistSongs │
+└────┬────┘   │ │   └───────────┘   └──────────────┘
+     │        │ │
+     └────────┴─┘
+       userFriends
 ```
 
 ## Real Music Data
@@ -67,7 +70,7 @@ bun run dev
 
 Open [http://localhost:5173](http://localhost:5173) in your browser.
 
-The example configures mock replication for `songs` and `friendPresence`. Open the debugger and use the **Replication** panel to inspect:
+The example configures mock replication for `songs` and `users`. Open the debugger and use the **Replication** panel to inspect:
 
 - Active/paused replication state
 - Sent and received counters
@@ -75,7 +78,7 @@ The example configures mock replication for `songs` and `friendPresence`. Open t
 - Recent replication errors
 - Manual `ReSync` / pause-resume controls
 
-The right-side friends rail updates every ~30 seconds using replicated presence documents.
+The right-side friends rail updates every ~30 seconds by following replicated user documents through the `userFriends` graph.
 
 ## Chrome DevTools Extension Integration
 

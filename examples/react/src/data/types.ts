@@ -38,6 +38,8 @@ export interface User {
   subscriptionType: "free" | "premium" | "family";
   country: string;
   birthDate: string;
+  avatarColor: string;
+  nowPlayingSongId?: string;
 }
 
 export interface Playlist {
@@ -55,4 +57,11 @@ export interface PlaylistSong {
   songId: string;
   position: number;
   addedById: string;
+}
+
+export interface UserFriend {
+  id: string;
+  userId: string;
+  friendId: string;
+  position: number;
 }
