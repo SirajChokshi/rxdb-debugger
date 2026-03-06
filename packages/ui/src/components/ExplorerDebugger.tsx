@@ -6,13 +6,13 @@ import type { PanelId } from "./Debugger.js";
 type ExplorerStatus = "loading" | "setup-required" | "empty" | "ready" | "error";
 
 const controlButtonClass =
-  "h-[22px] px-[var(--spacing-sm)] text-[11px] rounded-[var(--radius)] border border-border bg-bg-secondary text-text cursor-pointer hover:bg-bg-hover disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center justify-center";
+  "h-[20px] px-[var(--spacing-xs)] text-[10px] rounded-[var(--radius-sm)] border border-border bg-transparent text-text cursor-pointer hover:bg-bg-hover disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center justify-center";
 
 const dangerButtonClass =
-  "h-[22px] px-[var(--spacing-sm)] text-[11px] rounded-[var(--radius)] border border-border bg-bg-secondary text-error cursor-pointer hover:bg-bg-hover disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center justify-center";
+  "h-[20px] px-[var(--spacing-xs)] text-[10px] rounded-[var(--radius-sm)] border border-border bg-transparent text-error cursor-pointer hover:bg-bg-hover disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center justify-center";
 
 const chipClass =
-  "text-[10px] leading-none border border-border rounded-full px-[var(--spacing-xs)] py-[3px]";
+  "text-[10px] leading-none text-text-secondary";
 
 export interface ExplorerDebuggerAdapter {
   isRegistryAvailable(): Promise<boolean>;
@@ -460,7 +460,7 @@ export function ExplorerDebugger(props: ExplorerDebuggerProps): JSX.Element {
         <Match when={status() === "ready" || status() === "empty"}>
           <div style="height:100%; display:flex; background:var(--color-bg); color:var(--color-text);">
             <aside
-              style="width:300px; border-right:1px solid var(--color-border); display:flex; flex-direction:column; background:var(--color-bg-secondary);"
+              style="width:280px; border-right:1px solid var(--color-border); display:flex; flex-direction:column; background:var(--color-bg);"
             >
               <div style="padding:8px 10px; border-bottom:1px solid var(--color-border); display:flex; align-items:center; justify-content:space-between; gap:6px;">
                 <div>
@@ -476,7 +476,7 @@ export function ExplorerDebugger(props: ExplorerDebuggerProps): JSX.Element {
                 </button>
               </div>
 
-              <div style="overflow:auto; flex:1; padding:8px;">
+              <div style="overflow:auto; flex:1;">
                 <Show when={!isEmpty()} fallback={
                   <div style="padding:10px; font-size:11px; color:var(--color-text-secondary);">
                     No databases discovered yet. Create a database after installing the auto-discovery plugin.
@@ -489,34 +489,30 @@ export function ExplorerDebugger(props: ExplorerDebuggerProps): JSX.Element {
                       );
                       const isSelectedLogical = createMemo(() => selectedLogicalId() === logicalDb.id);
                       return (
-                        <div style="margin-bottom:8px; border:1px solid var(--color-border); border-radius:8px; overflow:hidden;">
+                        <div style="border-bottom:1px solid var(--color-border);">
                           <button
                             onClick={() => { void handleSelectLogical(logicalDb.id); }}
-                            style={`width:100%; text-align:left; border:none; cursor:pointer; padding:8px; display:flex; flex-direction:column; gap:5px; background:${isSelectedLogical() ? "var(--color-bg-selected)" : "var(--color-bg)"}; color:var(--color-text);`}
+                            style={`width:100%; text-align:left; border:none; cursor:pointer; padding:8px 10px; display:flex; flex-direction:column; gap:4px; background:${isSelectedLogical() ? "var(--color-bg-hover)" : "transparent"}; color:var(--color-text);`}
                           >
                             <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
                               <div style="font-weight:600; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
                                 {logicalDb.name}
                               </div>
-                              <div
-                                class={chipClass}
-                                style="color:var(--color-text-secondary);"
-                              >
+                              <div class={chipClass}>
                                 {logicalDb.openInstanceCount}/{logicalDb.totalInstanceCount}
                               </div>
                             </div>
-                            <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                            <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
                               <span
                                 title="RxDB storage adapter name"
                                 class={chipClass}
-                                style="color:var(--color-text-secondary);"
                               >
                                 storage: {logicalDb.storageName}
                               </span>
                               <span
                                 title="Logical database lifecycle status"
                                 class={chipClass}
-                                style={`color:${logicalDb.status === "open" ? "var(--color-success)" : "var(--color-text-secondary)"};`}
+                                style={`color:${logicalDb.status === "open" ? "var(--color-success)" : "var(--color-text-secondary)"}; font-weight:500;`}
                               >
                                 state: {logicalDb.status}
                               </span>
@@ -550,25 +546,30 @@ export function ExplorerDebugger(props: ExplorerDebuggerProps): JSX.Element {
                             </div>
                           </button>
 
-                          <button
-                            onClick={() => toggleExpanded(logicalDb.id)}
-                            style="width:100%; border:none; border-top:1px solid var(--color-border); background:var(--color-bg-secondary); color:var(--color-text-secondary); cursor:pointer; font-size:10px; padding:4px 8px; text-align:left;"
-                          >
-                            {isExpanded(logicalDb.id) ? "Hide instances" : "Show instances"}
-                          </button>
+                          <div style="display:flex; align-items:center; justify-content:space-between; border-top:1px solid var(--color-border); padding:4px 10px;">
+                            <button
+                              onClick={() => toggleExpanded(logicalDb.id)}
+                              style="border:none; background:transparent; color:var(--color-text-secondary); cursor:pointer; font-size:10px; padding:0; text-align:left;"
+                            >
+                              {isExpanded(logicalDb.id) ? "Hide instances" : "Show instances"}
+                            </button>
+                            <span style="font-size:10px; color:var(--color-text-muted);">
+                              {logicalInstances().length} {logicalInstances().length === 1 ? "instance" : "instances"}
+                            </span>
+                          </div>
 
                           <Show when={isExpanded(logicalDb.id)}>
-                            <div style="padding:8px; background:var(--color-bg-secondary); border-top:1px solid var(--color-border);">
+                            <div>
                               <For each={logicalInstances()}>
                                 {(instance) => {
                                   const isSelectedInstance = createMemo(() => selectedInstanceId() === instance.id);
                                   return (
                                     <div
-                                      style={`padding:6px; border:1px solid var(--color-border); border-radius:6px; margin-bottom:6px; background:${isSelectedInstance() ? "var(--color-bg-selected)" : "var(--color-bg)"};`}
+                                      style={`display:flex; align-items:center; gap:6px; padding:6px 10px; border-top:1px solid var(--color-border); background:${isSelectedInstance() ? "var(--color-bg-hover)" : "transparent"};`}
                                     >
                                       <button
                                         onClick={() => { void handleSelectInstance(instance.id); }}
-                                        style="display:flex; width:100%; justify-content:space-between; align-items:center; border:none; background:transparent; color:var(--color-text); cursor:pointer; padding:0;"
+                                        style="display:flex; width:100%; justify-content:space-between; align-items:center; border:none; background:transparent; color:var(--color-text); cursor:pointer; padding:0; min-width:0;"
                                       >
                                         <span style="font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
                                           {instance.instanceToken}
@@ -577,7 +578,7 @@ export function ExplorerDebugger(props: ExplorerDebuggerProps): JSX.Element {
                                           {instance.status}
                                         </span>
                                       </button>
-                                      <div style="display:flex; gap:6px; margin-top:6px;">
+                                      <div style="display:flex; gap:4px;">
                                         <button class={controlButtonClass} onClick={() => { void handleCloseInstance(instance.id); }} disabled={isBusy() || instance.status !== "open"}>
                                           Close
                                         </button>
@@ -600,12 +601,12 @@ export function ExplorerDebugger(props: ExplorerDebuggerProps): JSX.Element {
             </aside>
 
             <main style="flex:1; display:flex; flex-direction:column; min-width:0;">
-              <div style="padding:8px 10px; border-bottom:1px solid var(--color-border); display:flex; align-items:center; justify-content:space-between; gap:8px;">
+              <div style="padding:6px 10px; border-bottom:1px solid var(--color-border); display:flex; align-items:center; justify-content:space-between; gap:8px;">
                 <div>
-                  <div style="font-size:13px; font-weight:600;">
+                  <div style="font-size:12px; font-weight:600;">
                     {selectedLogical()?.name ?? "No database selected"}
                   </div>
-                  <div style="font-size:11px; color:var(--color-text-secondary);">
+                  <div style="font-size:10px; color:var(--color-text-secondary);">
                     {selectedInstance()
                       ? `Instance ${selectedInstance()!.instanceToken}`
                       : "Select an open instance to inspect"}
