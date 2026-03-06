@@ -104,6 +104,16 @@ With auto-discovery enabled, the extension can:
 
 No `window.__rxdb_handle` assignment is required.
 
+### Encryption Metadata Productization
+
+The auto-discovery registry includes non-secret encryption metadata so the extension can show encryption badges without manual wiring:
+
+- whether a database password is configured
+- whether any collection has encrypted fields
+- whether any collection uses encrypted attachments
+
+This metadata is derived from RxDB schema and creation options only. Raw password values are never exposed through the registry.
+
 ## API Reference
 
 ### RxdbDebugger

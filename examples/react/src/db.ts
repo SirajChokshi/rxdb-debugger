@@ -1,4 +1,5 @@
 import { createRxDatabase, type RxDatabase } from "rxdb";
+import { wrappedKeyEncryptionCryptoJsStorage } from "rxdb/plugins/encryption-crypto-js";
 import { replicateRxCollection } from "rxdb/plugins/replication";
 import { getRxStorageDexie } from "rxdb/plugins/storage-dexie";
 import { installRxdbDebuggerAutoDiscovery } from "@rxdb-debugger/core";
@@ -8,6 +9,36 @@ import { ARTISTS, ALBUMS, SONGS, USERS, PLAYLISTS, PLAYLIST_SONGS } from "./data
 export { ARTISTS, ALBUMS, SONGS, USERS, PLAYLISTS, PLAYLIST_SONGS };
 
 installRxdbDebuggerAutoDiscovery();
+
+const ENABLE_EXAMPLE_ENCRYPTION =
+  import.meta.env.VITE_RXDB_DEBUGGER_ENABLE_ENCRYPTION === "true";
+const EXAMPLE_DB_PASSWORD =
+  import.meta.env.VITE_RXDB_DEBUGGER_DB_PASSWORD || "rxdb-debugger-demo-password";
+const EXAMPLE_DATABASE_NAME =
+  ENABLE_EXAMPLE_ENCRYPTION ? "musiccatalog-encrypted" : "musiccatalog";
+
+function getExampleStorage() {
+  const baseStorage = getRxStorageDexie();
+  if (!ENABLE_EXAMPLE_ENCRYPTION) {
+    return baseStorage;
+  }
+  return wrappedKeyEncryptionCryptoJsStorage({
+    storage: baseStorage,
+  });
+}
+
+function withOptionalEncryptedFields<T extends Record<string, unknown>>(
+  schema: T,
+  encryptedFields: string[],
+): T & { encrypted?: string[] } {
+  if (!ENABLE_EXAMPLE_ENCRYPTION) {
+    return schema;
+  }
+  return {
+    ...schema,
+    encrypted: encryptedFields,
+  };
+}
 
 // ============================================================================
 // MOCK SONGS REPLICATION
@@ -772,15 +803,19 @@ let dbPromise: Promise<RxDatabase> | null = null;
 
 export function getDatabase(): Promise<RxDatabase> {
   if (!dbPromise) {
+    const artistsSchema = withOptionalEncryptedFields(artistSchema, ["bio"]);
+    const usersSchema = withOptionalEncryptedFields(userSchema, ["email", "birthDate"]);
+
     dbPromise = createRxDatabase({
-      name: "musiccatalog",
-      storage: getRxStorageDexie(),
+      name: EXAMPLE_DATABASE_NAME,
+      storage: getExampleStorage(),
+      ...(ENABLE_EXAMPLE_ENCRYPTION ? { password: EXAMPLE_DB_PASSWORD } : {}),
     }).then(async (db) => {
       await db.addCollections({
-        artists: { schema: artistSchema },
+        artists: { schema: artistsSchema },
         albums: { schema: albumSchema },
         songs: { schema: songSchema },
-        users: { schema: userSchema },
+        users: { schema: usersSchema },
         playlists: { schema: playlistSchema },
         playlistSongs: { schema: playlistSongSchema },
         userFollows: { schema: userFollowSchema },
