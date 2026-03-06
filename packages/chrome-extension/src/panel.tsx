@@ -1,4 +1,4 @@
-import { For, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js";
+import { For, Match, Show, Switch, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js";
 import { render } from "solid-js/web";
 import { mountDebugger } from "@rxdb-debugger/ui";
 import {
@@ -56,6 +56,20 @@ async function withTimeout<T>(
         reject(error);
       });
   });
+}
+
+async function waitForDebuggerContainer(
+  getContainer: () => HTMLDivElement | undefined,
+  maxAttempts = 20,
+): Promise<HTMLDivElement> {
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const container = getContainer();
+    if (container) {
+      return container;
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 16));
+  }
+  throw new Error("Debugger container not available");
 }
 
 function getStyles() {
@@ -170,6 +184,7 @@ function Panel() {
     }
     return instances().filter((entry) => entry.logicalDatabaseId === selectedId);
   });
+  const isEmpty = createMemo(() => status() === "empty");
 
   const isExpanded = (logicalId: string): boolean => {
     return expandedLogicalIds().includes(logicalId);
@@ -234,18 +249,15 @@ function Panel() {
       );
       if (generation !== connectGeneration) return;
 
-      if (!debuggerContainerRef) {
-        throw new Error("Debugger container not available");
-      }
-
+      setActiveInstanceId(instanceId);
+      setStatus("ready");
+      const container = await waitForDebuggerContainer(() => debuggerContainerRef);
       const theme = getDevToolsTheme();
       debuggerCleanup = mountDebugger({
-        container: debuggerContainerRef,
+        container,
         db: remoteDb,
         theme,
       });
-      setActiveInstanceId(instanceId);
-      setStatus("ready");
     } catch (err) {
       if (generation !== connectGeneration) return;
       setStatus("error");
@@ -379,6 +391,29 @@ function Panel() {
     await connectToInstance(instanceId);
   }
 
+  let loadingWatchdogId: number | undefined;
+
+  createEffect(() => {
+    const currentStatus = status();
+    if (loadingWatchdogId !== undefined) {
+      window.clearTimeout(loadingWatchdogId);
+      loadingWatchdogId = undefined;
+    }
+
+    if (currentStatus !== "loading") {
+      return;
+    }
+
+    loadingWatchdogId = window.setTimeout(() => {
+      if (status() === "loading") {
+        setStatus("error");
+        setErrorMessage(
+          "Timed out while connecting to the inspected page. Reload the page and reopen the RxDB panel.",
+        );
+      }
+    }, 15000);
+  });
+
   onMount(() => {
     let lastTheme = getDevToolsTheme();
 
@@ -418,23 +453,26 @@ function Panel() {
 
   onCleanup(() => {
     connectGeneration += 1;
+    if (loadingWatchdogId !== undefined) {
+      window.clearTimeout(loadingWatchdogId);
+      loadingWatchdogId = undefined;
+    }
     void disconnectDebugger();
   });
 
-  if (status() === "loading") {
-    return <LoadingScreen />;
-  }
-  if (status() === "setup-required") {
-    return <SetupRequired onRetry={() => { void refreshInventory(false); }} />;
-  }
-  if (status() === "error") {
-    return <ErrorScreen message={errorMessage()} />;
-  }
-
-  const isEmpty = status() === "empty";
-
   return (
-    <div style="height:100vh; display:flex; background:var(--color-bg); color:var(--color-text);">
+    <Switch>
+      <Match when={status() === "loading"}>
+        <LoadingScreen />
+      </Match>
+      <Match when={status() === "setup-required"}>
+        <SetupRequired onRetry={() => { void refreshInventory(false); }} />
+      </Match>
+      <Match when={status() === "error"}>
+        <ErrorScreen message={errorMessage()} />
+      </Match>
+      <Match when={status() === "ready" || status() === "empty"}>
+        <div style="height:100vh; display:flex; background:var(--color-bg); color:var(--color-text);">
       <aside
         style="width:320px; border-right:1px solid var(--color-border); display:flex; flex-direction:column; background:var(--color-bg-secondary);"
       >
@@ -457,7 +495,7 @@ function Panel() {
         </div>
 
         <div style="overflow:auto; flex:1; padding:8px;">
-          <Show when={!isEmpty} fallback={
+          <Show when={!isEmpty()} fallback={
             <div style="padding:12px; font-size:13px; color:var(--color-text-secondary);">
               No databases discovered yet. Create a database after installing the auto-discovery plugin.
             </div>
@@ -599,7 +637,12 @@ function Panel() {
           <div ref={debuggerContainerRef} style="flex:1; min-height:0;" />
         </Show>
       </main>
-    </div>
+        </div>
+      </Match>
+      <Match when={true}>
+        <LoadingScreen />
+      </Match>
+    </Switch>
   );
 }
 
