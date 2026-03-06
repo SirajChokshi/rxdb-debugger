@@ -5,6 +5,7 @@ import { getRxStorageDexie } from "rxdb/plugins/storage-dexie";
 import { installRxdbDebuggerAutoDiscovery } from "@rxdb-debugger/core";
 import { Subject } from "rxjs";
 import { ARTISTS, ALBUMS, SONGS, USERS, PLAYLISTS, PLAYLIST_SONGS } from "./data/index.js";
+import { getAlbumCoverUrl, getArtistImageUrl } from "./media";
 
 export { ARTISTS, ALBUMS, SONGS, USERS, PLAYLISTS, PLAYLIST_SONGS };
 
@@ -833,17 +834,42 @@ export function getDatabase(): Promise<RxDatabase> {
 // SEED FUNCTION
 // ============================================================================
 
+function getSeedPlaylistCoverUrl(playlistId: string): string {
+  const firstEntry = PLAYLIST_SONGS
+    .filter((entry) => entry.playlistId === playlistId)
+    .sort((a, b) => a.position - b.position)[0];
+  if (!firstEntry) {
+    return "";
+  }
+
+  const song = SONGS.find((entry) => entry.id === firstEntry.songId);
+  if (!song) {
+    return "";
+  }
+
+  return getAlbumCoverUrl(song.albumId) ?? "";
+}
+
 export async function seedDatabase(db: RxDatabase): Promise<void> {
   const now = Date.now();
 
   // Seed Artists
   await db.collections.artists.bulkInsert(
-    ARTISTS.map((a) => ({ ...a, imageUrl: `https://picsum.photos/seed/${a.id}/300/300`, createdAt: now }))
+    ARTISTS.map((artist) => ({
+      ...artist,
+      imageUrl: getArtistImageUrl(artist.id) ?? "",
+      createdAt: now,
+    }))
   );
 
   // Seed Albums
   await db.collections.albums.bulkInsert(
-    ALBUMS.map((a) => ({ ...a, coverUrl: `https://picsum.photos/seed/${a.id}/300/300`, durationMs: a.totalTracks * 240000, createdAt: now }))
+    ALBUMS.map((album) => ({
+      ...album,
+      coverUrl: getAlbumCoverUrl(album.id) ?? "",
+      durationMs: album.totalTracks * 240000,
+      createdAt: now,
+    }))
   );
 
   // Seed Songs
@@ -859,12 +885,17 @@ export async function seedDatabase(db: RxDatabase): Promise<void> {
 
   // Seed Users
   await db.collections.users.bulkInsert(
-    USERS.map((u) => ({ ...u, avatarUrl: `https://picsum.photos/seed/${u.id}/100/100`, createdAt: now, lastActiveAt: now }))
+    USERS.map((user) => ({ ...user, avatarUrl: "", createdAt: now, lastActiveAt: now }))
   );
 
   // Seed Playlists
   await db.collections.playlists.bulkInsert(
-    PLAYLISTS.map((p) => ({ ...p, coverUrl: `https://picsum.photos/seed/${p.id}/300/300`, createdAt: now, updatedAt: now }))
+    PLAYLISTS.map((playlist) => ({
+      ...playlist,
+      coverUrl: getSeedPlaylistCoverUrl(playlist.id),
+      createdAt: now,
+      updatedAt: now,
+    }))
   );
 
   // Seed Playlist Songs

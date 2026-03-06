@@ -13,6 +13,7 @@ import {
   formatDuration,
   formatPlayCount,
 } from "./db";
+import { MEDIA_ATTRIBUTION_LINKS } from "./media";
 
 // ============================================================================
 // TYPES
@@ -23,6 +24,7 @@ interface Artist {
   name: string;
   bio: string;
   genre: string;
+  imageUrl?: string;
   country: string;
   formedYear: number;
   isVerified: boolean;
@@ -453,7 +455,7 @@ export default function App(): JSX.Element {
       name,
       description: `Created by ${currentUser?.displayName || "You"}`,
       ownerId: currentUserId,
-      coverUrl: `https://picsum.photos/seed/${playlistId}/300/300`,
+      coverUrl: "",
       isPublic: false,
       isCollaborative: false,
       followerCount: 0,
@@ -500,10 +502,18 @@ export default function App(): JSX.Element {
 
     const playlistDoc = await db.collections["playlists"]?.findOne(playlistId).exec();
     if (playlistDoc) {
-      await (playlistDoc as { incrementalPatch: (patch: { updatedAt: number }) => Promise<void> })
-        .incrementalPatch({ updatedAt: Date.now() });
+      const playlistState = (playlistDoc as { toJSON: (withMeta?: boolean) => Playlist }).toJSON(true);
+      const songToAdd = songs.find((song) => song.id === songId);
+      const nextCoverUrl = songToAdd ? albums.find((album) => album.id === songToAdd.albumId)?.coverUrl || "" : "";
+      const patch: { updatedAt: number; coverUrl?: string } = {
+        updatedAt: Date.now(),
+      };
+      if (!playlistState.coverUrl && nextCoverUrl) {
+        patch.coverUrl = nextCoverUrl;
+      }
+      await (playlistDoc as { incrementalPatch: (nextPatch: typeof patch) => Promise<void> }).incrementalPatch(patch);
     }
-  }, [currentUserId, db, playlistSongs]);
+  }, [albums, currentUserId, db, playlistSongs, songs]);
 
   const handleRemoveSongFromPlaylist = useCallback(async (playlistSongId: string, playlistId: string) => {
     if (!db) return;
@@ -514,10 +524,19 @@ export default function App(): JSX.Element {
 
     const playlistDoc = await db.collections["playlists"]?.findOne(playlistId).exec();
     if (playlistDoc) {
-      await (playlistDoc as { incrementalPatch: (patch: { updatedAt: number }) => Promise<void> })
-        .incrementalPatch({ updatedAt: Date.now() });
+      const remainingEntries = [...playlistSongs]
+        .filter((entry) => entry.id !== playlistSongId && entry.playlistId === playlistId)
+        .sort((a, b) => a.position - b.position);
+      const leadSong = remainingEntries.length > 0
+        ? songs.find((song) => song.id === remainingEntries[0]?.songId) || null
+        : null;
+      const patch = {
+        updatedAt: Date.now(),
+        coverUrl: leadSong ? albums.find((album) => album.id === leadSong.albumId)?.coverUrl || "" : "",
+      };
+      await (playlistDoc as { incrementalPatch: (nextPatch: typeof patch) => Promise<void> }).incrementalPatch(patch);
     }
-  }, [db]);
+  }, [albums, db, playlistSongs, songs]);
 
   const disableLayoutTransitionsTemporarily = useCallback(() => {
     setAllowLayoutTransitions(false);
@@ -742,6 +761,7 @@ export default function App(): JSX.Element {
                 onRemoveSongFromPlaylist={handleRemoveSongFromPlaylist}
               />
             )}
+            <MediaAttributionFooter />
           </main>
           <FriendsSidebar
             friendPresence={friendPresence}
@@ -762,7 +782,13 @@ export default function App(): JSX.Element {
           }}
         >
           <div className="w-14 h-14 bg-neutral-800 rounded overflow-hidden shrink-0">
-            <img src={getAlbum(currentSong.albumId)?.coverUrl || ""} alt="" className="w-full h-full object-cover" draggable={false} />
+            <AlbumCoverImage
+              src={getAlbum(currentSong.albumId)?.coverUrl}
+              alt={getAlbum(currentSong.albumId)?.title || currentSong.title}
+              className="w-full h-full object-cover"
+              fallbackClassName="bg-neutral-800 text-neutral-500 flex items-center justify-center text-lg"
+              draggable={false}
+            />
           </div>
           <div className="flex-1 min-w-0">
             <p className="font-medium truncate">{currentSong.title}</p>
@@ -971,6 +997,102 @@ function formatPresenceRelativeTime(timestamp: number): string {
   return `${Math.floor(minutes / 60)}h ago`;
 }
 
+function MediaImage({
+  src,
+  alt,
+  className,
+  fallback,
+  draggable = false,
+}: {
+  src?: string;
+  alt: string;
+  className: string;
+  fallback: JSX.Element;
+  draggable?: boolean;
+}) {
+  const [hasError, setHasError] = useState(!src);
+
+  useEffect(() => {
+    setHasError(!src);
+  }, [src]);
+
+  if (!src || hasError) {
+    return fallback;
+  }
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className={className}
+      draggable={draggable}
+      loading="lazy"
+      onError={() => setHasError(true)}
+    />
+  );
+}
+
+function ArtistImage({
+  artist,
+  className,
+  fallbackClassName,
+}: {
+  artist: Artist;
+  className: string;
+  fallbackClassName: string;
+}) {
+  return (
+    <MediaImage
+      src={artist.imageUrl}
+      alt={artist.name}
+      className={className}
+      fallback={(
+        <div className={`${className} ${fallbackClassName}`}>
+          {artist.name.charAt(0)}
+        </div>
+      )}
+    />
+  );
+}
+
+function AlbumCoverImage({
+  src,
+  alt,
+  className,
+  fallbackClassName,
+  draggable = false,
+}: {
+  src?: string;
+  alt: string;
+  className: string;
+  fallbackClassName: string;
+  draggable?: boolean;
+}) {
+  return (
+    <MediaImage
+      src={src}
+      alt={alt}
+      className={className}
+      draggable={draggable}
+      fallback={(
+        <div className={`${className} ${fallbackClassName}`}>
+          ♪
+        </div>
+      )}
+    />
+  );
+}
+
+function MediaAttributionFooter() {
+  return (
+    <footer className="px-8 pb-10 pt-6 text-[11px] leading-5 text-neutral-500">
+      Artist photos via <a className="text-neutral-300 hover:text-white transition-colors" href={MEDIA_ATTRIBUTION_LINKS.artistPhotos} target="_blank" rel="noreferrer">Wikimedia Commons</a>.
+      Album artwork via <a className="text-neutral-300 hover:text-white transition-colors" href={MEDIA_ATTRIBUTION_LINKS.albumCovers} target="_blank" rel="noreferrer">Cover Art Archive</a> and <a className="text-neutral-300 hover:text-white transition-colors" href={MEDIA_ATTRIBUTION_LINKS.musicbrainz} target="_blank" rel="noreferrer">MusicBrainz</a>.
+      Rights remain with the original copyright holders and licensors.
+    </footer>
+  );
+}
+
 function FriendsSidebar({
   friendPresence,
   isCollapsed,
@@ -1065,6 +1187,7 @@ function HomeView({ artists, albums, songs, onPlaySong, onSelectArtist }: {
 }) {
   const topSongs = [...songs].sort((a, b) => b.playCount - a.playCount).slice(0, 6);
   const featuredArtists = artists.slice(0, 6);
+  const albumById = new Map(albums.map((album) => [album.id, album]));
 
   if (artists.length === 0) {
     return (
@@ -1094,9 +1217,11 @@ function HomeView({ artists, albums, songs, onPlaySong, onSelectArtist }: {
             onClick={() => onSelectArtist(artist)}
             className="flex items-center gap-4 bg-neutral-800/50 hover:bg-neutral-800 rounded overflow-hidden text-left transition-colors group"
           >
-            <div className="w-16 h-16 bg-linear-to-br from-purple-500 to-blue-500 flex items-center justify-center text-2xl shrink-0">
-              {artist.name.charAt(0)}
-            </div>
+            <ArtistImage
+              artist={artist}
+              className="w-16 h-16 object-cover shrink-0"
+              fallbackClassName="bg-linear-to-br from-purple-500 to-blue-500 flex items-center justify-center text-2xl text-white"
+            />
             <span className="font-semibold truncate pr-4">{artist.name}</span>
           </button>
         ))}
@@ -1113,7 +1238,12 @@ function HomeView({ artists, albums, songs, onPlaySong, onSelectArtist }: {
               className="flex items-center gap-3 p-2 rounded hover:bg-neutral-800/50 transition-colors text-left group"
             >
               <span className="w-6 text-neutral-500 text-sm text-right">{idx + 1}</span>
-              <div className="w-10 h-10 bg-neutral-800 rounded shrink-0" />
+              <AlbumCoverImage
+                src={albumById.get(song.albumId)?.coverUrl}
+                alt={albumById.get(song.albumId)?.title || song.title}
+                className="w-10 h-10 rounded shrink-0 object-cover"
+                fallbackClassName="bg-neutral-800 text-neutral-500 flex items-center justify-center text-sm"
+              />
               <div className="flex-1 min-w-0">
                 <p className="font-medium truncate">{song.title}</p>
                 <p className="text-neutral-400 text-sm truncate">{formatPlayCount(song.playCount)} plays</p>
@@ -1133,7 +1263,12 @@ function HomeView({ artists, albums, songs, onPlaySong, onSelectArtist }: {
           {albums.slice(0, 5).map((album) => (
             <div key={album.id} className="group">
               <div className="aspect-square bg-neutral-800 rounded-lg mb-3 overflow-hidden relative">
-                <img src={album.coverUrl} alt="" className="w-full h-full object-cover" />
+                <AlbumCoverImage
+                  src={album.coverUrl}
+                  alt={album.title}
+                  className="w-full h-full object-cover"
+                  fallbackClassName="bg-neutral-800 text-neutral-500 flex items-center justify-center text-4xl"
+                />
                 <button className="absolute bottom-2 right-2 w-12 h-12 bg-green-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all shadow-xl">
                   <PlayIcon />
                 </button>
@@ -1155,9 +1290,11 @@ function ArtistsGrid({ artists, onSelect }: { artists: Artist[]; onSelect: (arti
       <div className="grid grid-cols-5 gap-6">
         {artists.map((artist) => (
           <button key={artist.id} onClick={() => onSelect(artist)} className="text-center group">
-            <div className="aspect-square bg-linear-to-br from-purple-600 to-blue-500 rounded-full mb-3 flex items-center justify-center text-4xl shadow-lg group-hover:scale-105 transition-transform">
-              {artist.name.charAt(0)}
-            </div>
+            <ArtistImage
+              artist={artist}
+              className="w-full aspect-square rounded-full mb-3 object-cover shadow-lg group-hover:scale-105 transition-transform"
+              fallbackClassName="bg-linear-to-br from-purple-600 to-blue-500 flex items-center justify-center text-4xl text-white"
+            />
             <p className="font-medium truncate">{artist.name}</p>
             <p className="text-neutral-400 text-sm">{artist.genre}</p>
           </button>
@@ -1175,21 +1312,30 @@ function ArtistDetail({ artist, albums, songs, onBack, onPlaySong, currentSong }
   onPlaySong: (song: Song) => void;
   currentSong: Song | null;
 }) {
+  const albumById = new Map(albums.map((album) => [album.id, album]));
+
   return (
     <div>
       {/* Hero */}
-      <div className="h-72 bg-linear-to-b from-purple-900 to-transparent p-8 flex items-end">
-        <div>
-          <button onClick={onBack} className="text-neutral-300 hover:text-white mb-4 text-sm flex items-center gap-1">
-            ← Back
-          </button>
-          {artist.isVerified && (
-            <p className="text-xs text-blue-400 flex items-center gap-1 mb-1">
-              <span>✓</span> Verified Artist
-            </p>
-          )}
-          <h1 className="text-6xl font-bold mb-2">{artist.name}</h1>
-          <p className="text-neutral-300">{formatPlayCount(artist.monthlyListeners)} monthly listeners</p>
+      <div className="h-80 bg-linear-to-b from-purple-900 to-transparent p-8 flex items-end">
+        <div className="flex items-end gap-6">
+          <ArtistImage
+            artist={artist}
+            className="w-40 h-40 rounded-full object-cover shadow-2xl border border-white/10"
+            fallbackClassName="bg-linear-to-br from-purple-600 to-blue-500 flex items-center justify-center text-6xl text-white"
+          />
+          <div>
+            <button onClick={onBack} className="text-neutral-300 hover:text-white mb-4 text-sm flex items-center gap-1">
+              ← Back
+            </button>
+            {artist.isVerified && (
+              <p className="text-xs text-blue-400 flex items-center gap-1 mb-1">
+                <span>✓</span> Verified Artist
+              </p>
+            )}
+            <h1 className="text-6xl font-bold mb-2">{artist.name}</h1>
+            <p className="text-neutral-300">{formatPlayCount(artist.monthlyListeners)} monthly listeners</p>
+          </div>
         </div>
       </div>
 
@@ -1216,7 +1362,12 @@ function ArtistDetail({ artist, albums, songs, onBack, onPlaySong, currentSong }
                   }`}
               >
                 <span className="w-6 text-neutral-500 text-center">{idx + 1}</span>
-                <div className="w-10 h-10 bg-neutral-800 rounded shrink-0" />
+                <AlbumCoverImage
+                  src={albumById.get(song.albumId)?.coverUrl}
+                  alt={albumById.get(song.albumId)?.title || song.title}
+                  className="w-10 h-10 rounded shrink-0 object-cover"
+                  fallbackClassName="bg-neutral-800 text-neutral-500 flex items-center justify-center text-sm"
+                />
                 <div className="flex-1 min-w-0">
                   <p className={`font-medium truncate ${currentSong?.id === song.id ? "text-green-500" : ""}`}>
                     {song.title}
@@ -1237,7 +1388,12 @@ function ArtistDetail({ artist, albums, songs, onBack, onPlaySong, currentSong }
               {albums.map((album) => (
                 <div key={album.id} className="group">
                   <div className="aspect-square bg-neutral-800 rounded-lg mb-3 overflow-hidden">
-                    <img src={album.coverUrl} alt="" className="w-full h-full object-cover" />
+                    <AlbumCoverImage
+                      src={album.coverUrl}
+                      alt={album.title}
+                      className="w-full h-full object-cover"
+                      fallbackClassName="bg-neutral-800 text-neutral-500 flex items-center justify-center text-4xl"
+                    />
                   </div>
                   <p className="font-medium truncate">{album.title}</p>
                   <p className="text-neutral-400 text-sm">{album.releaseYear} • Album</p>
@@ -1259,7 +1415,12 @@ function AlbumsGrid({ albums, getArtistName }: { albums: Album[]; getArtistName:
         {albums.map((album) => (
           <div key={album.id} className="group">
             <div className="aspect-square bg-neutral-800 rounded-lg mb-3 overflow-hidden relative shadow-lg">
-              <img src={album.coverUrl} alt="" className="w-full h-full object-cover" />
+              <AlbumCoverImage
+                src={album.coverUrl}
+                alt={album.title}
+                className="w-full h-full object-cover"
+                fallbackClassName="bg-neutral-800 text-neutral-500 flex items-center justify-center text-4xl"
+              />
               <button className="absolute bottom-2 right-2 w-12 h-12 bg-green-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all shadow-xl text-black">
                 <PlayIcon />
               </button>
@@ -1365,7 +1526,13 @@ function PlaylistsView({
             >
               <div className="aspect-square bg-linear-to-br from-indigo-500 to-purple-600 rounded-lg mb-3 relative shadow-lg overflow-hidden">
                 {playlist.coverUrl ? (
-                  <img src={playlist.coverUrl} alt="" className="w-full h-full object-cover" draggable={false} />
+                  <AlbumCoverImage
+                    src={playlist.coverUrl}
+                    alt={playlist.name}
+                    className="w-full h-full object-cover"
+                    fallbackClassName="bg-linear-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center text-5xl"
+                    draggable={false}
+                  />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-5xl">🎶</div>
                 )}
