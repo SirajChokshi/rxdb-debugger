@@ -78,6 +78,43 @@ const unmount = mountDebugger({
 unmount();
 ```
 
+### Mounted Explorer UI (Feature Parity with Extension)
+
+If you want the same database explorer shell used by the DevTools extension (logical DBs, instances, close/remove actions), mount the explorer UI:
+
+```typescript
+import { mountExplorerDebugger } from "rxdb-debugger/ui";
+
+const unmount = mountExplorerDebugger({
+  container: "#debug-panel",
+  adapter: {
+    async isRegistryAvailable() {
+      return typeof window.__RXDB_DEBUGGER__?.snapshot === "function";
+    },
+    async listLogicalDatabases() {
+      return Object.values(window.__RXDB_DEBUGGER__.snapshot().logicalDatabases);
+    },
+    async listInstances(logicalDatabaseId) {
+      const instances = Object.values(window.__RXDB_DEBUGGER__.snapshot().instances);
+      return logicalDatabaseId
+        ? instances.filter((instance) => instance.logicalDatabaseId === logicalDatabaseId)
+        : instances;
+    },
+    async connectToInstance(instanceId) {
+      return window.__RXDB_DEBUGGER__.getInstanceHandle(instanceId);
+    },
+    async closeInstance(instanceId) {
+      return window.__RXDB_DEBUGGER__.closeInstance(instanceId);
+    },
+    async removeInstance(instanceId) {
+      return window.__RXDB_DEBUGGER__.removeInstance(instanceId);
+    },
+  },
+  shellTheme: "auto",
+  inspectorTheme: "auto",
+});
+```
+
 ### Chrome Extension Auto-Discovery (No Manual Window Handles)
 
 To let the DevTools extension discover and manage all RxDB databases automatically, install the auto-discovery plugin once before creating databases:

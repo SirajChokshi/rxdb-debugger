@@ -10,7 +10,17 @@ export {
   type MountDebuggerOptions,
 } from "./mount.js";
 
+export {
+  mountExplorerDebugger,
+  type MountExplorerDebuggerOptions,
+} from "./mount-explorer.js";
+
 export { type PanelId } from "./components/Debugger.js";
+export {
+  type ExplorerDatabaseInstance,
+  type ExplorerDebuggerAdapter,
+  type ExplorerLogicalDatabase,
+} from "./components/ExplorerDebugger.js";
 
 export {
   type Theme,
