@@ -5,6 +5,15 @@ import type { PanelId } from "./Debugger.js";
 
 type ExplorerStatus = "loading" | "setup-required" | "empty" | "ready" | "error";
 
+const controlButtonClass =
+  "h-[22px] px-[var(--spacing-sm)] text-[11px] rounded-[var(--radius)] border border-border bg-bg-secondary text-text cursor-pointer hover:bg-bg-hover disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center justify-center";
+
+const dangerButtonClass =
+  "h-[22px] px-[var(--spacing-sm)] text-[11px] rounded-[var(--radius)] border border-border bg-bg-secondary text-error cursor-pointer hover:bg-bg-hover disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center justify-center";
+
+const chipClass =
+  "text-[10px] leading-none border border-border rounded-full px-[var(--spacing-xs)] py-[3px]";
+
 export interface ExplorerDebuggerAdapter {
   isRegistryAvailable(): Promise<boolean>;
   listLogicalDatabases(): Promise<ExplorerLogicalDatabase[]>;
@@ -66,48 +75,19 @@ function LoadingView() {
 function SetupRequiredView(props: { setupSnippet: string; onRetry: () => void }) {
   return (
     <div
-      style="
-        display:flex;
-        flex-direction:column;
-        align-items:center;
-        justify-content:center;
-        height:100%;
-        text-align:center;
-        padding:32px;
-        gap:12px;
-      "
+      class="flex flex-col items-center justify-center h-full text-center p-[var(--spacing-xl)] gap-[var(--spacing-sm)]"
     >
-      <div style="font-size:40px;">🔍</div>
-      <h2 style="margin:0; font-size:22px;">Auto-Discovery Plugin Required</h2>
-      <p style="margin:0; color:var(--color-text-secondary); max-width:560px;">
+      <div class="text-[32px] leading-none">🔍</div>
+      <h2 class="m-0 text-base font-semibold">Auto-Discovery Plugin Required</h2>
+      <p class="m-0 text-text-secondary text-xs max-w-[560px]">
         Install the RxDB Debugger auto-discovery plugin before creating your databases.
       </p>
       <pre
-        style="
-          max-width:640px;
-          overflow:auto;
-          background:var(--color-bg-secondary);
-          border:1px solid var(--color-border);
-          border-radius:8px;
-          padding:14px;
-          text-align:left;
-          font-size:12px;
-          color:var(--color-success);
-        "
+        class="max-w-[640px] overflow-auto bg-bg-secondary border border-border rounded-[var(--radius)] p-[var(--spacing-md)] text-left text-[11px] text-success"
       >
         {props.setupSnippet}
       </pre>
-      <button
-        style="
-          border:1px solid var(--color-border);
-          border-radius:6px;
-          background:var(--color-bg-secondary);
-          color:var(--color-text);
-          cursor:pointer;
-          padding:8px 12px;
-        "
-        onClick={props.onRetry}
-      >
+      <button class={controlButtonClass} onClick={props.onRetry}>
         Retry
       </button>
     </div>
@@ -117,31 +97,12 @@ function SetupRequiredView(props: { setupSnippet: string; onRetry: () => void })
 function ErrorView(props: { message: string; onRetry: () => void }) {
   return (
     <div
-      style="
-        display:flex;
-        flex-direction:column;
-        align-items:center;
-        justify-content:center;
-        height:100%;
-        text-align:center;
-        padding:32px;
-        gap:10px;
-      "
+      class="flex flex-col items-center justify-center h-full text-center p-[var(--spacing-xl)] gap-[var(--spacing-sm)]"
     >
-      <div style="font-size:40px;">❌</div>
-      <h2 style="margin:0; color:var(--color-error);">Error connecting to database</h2>
-      <p style="margin:0; color:var(--color-text-secondary); max-width:520px;">{props.message}</p>
-      <button
-        style="
-          border:1px solid var(--color-border);
-          border-radius:6px;
-          background:var(--color-bg-secondary);
-          color:var(--color-text);
-          cursor:pointer;
-          padding:8px 12px;
-        "
-        onClick={props.onRetry}
-      >
+      <div class="text-[32px] leading-none">❌</div>
+      <h2 class="m-0 text-error text-base font-semibold">Error connecting to database</h2>
+      <p class="m-0 text-text-secondary text-xs max-w-[520px]">{props.message}</p>
+      <button class={controlButtonClass} onClick={props.onRetry}>
         Retry
       </button>
     </div>
@@ -474,7 +435,7 @@ export function ExplorerDebugger(props: ExplorerDebuggerProps): JSX.Element {
 
   return (
     <div
-      class="rxdb-debugger"
+      class="rxdb-debugger text-xs leading-normal"
       style={{
         width: props.width,
         height: props.height,
@@ -499,29 +460,25 @@ export function ExplorerDebugger(props: ExplorerDebuggerProps): JSX.Element {
         <Match when={status() === "ready" || status() === "empty"}>
           <div style="height:100%; display:flex; background:var(--color-bg); color:var(--color-text);">
             <aside
-              style="width:320px; border-right:1px solid var(--color-border); display:flex; flex-direction:column; background:var(--color-bg-secondary);"
+              style="width:300px; border-right:1px solid var(--color-border); display:flex; flex-direction:column; background:var(--color-bg-secondary);"
             >
-              <div style="padding:12px; border-bottom:1px solid var(--color-border); display:flex; align-items:center; justify-content:space-between; gap:8px;">
+              <div style="padding:8px 10px; border-bottom:1px solid var(--color-border); display:flex; align-items:center; justify-content:space-between; gap:6px;">
                 <div>
-                  <div style="font-size:13px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase;">
+                  <div style="font-size:12px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase;">
                     Database Explorer
                   </div>
-                  <div style="font-size:12px; color:var(--color-text-secondary);">
+                  <div style="font-size:11px; color:var(--color-text-secondary);">
                     {logicalDatabases().length} databases • {instances().length} instances
                   </div>
                 </div>
-                <button
-                  style="padding:6px 10px; border:1px solid var(--color-border); border-radius:6px; background:var(--color-bg); color:var(--color-text); cursor:pointer;"
-                  onClick={() => { void refreshInventory(true); }}
-                  disabled={isBusy()}
-                >
+                <button class={controlButtonClass} onClick={() => { void refreshInventory(true); }} disabled={isBusy()}>
                   Refresh
                 </button>
               </div>
 
               <div style="overflow:auto; flex:1; padding:8px;">
                 <Show when={!isEmpty()} fallback={
-                  <div style="padding:12px; font-size:13px; color:var(--color-text-secondary);">
+                  <div style="padding:10px; font-size:11px; color:var(--color-text-secondary);">
                     No databases discovered yet. Create a database after installing the auto-discovery plugin.
                   </div>
                 }>
@@ -535,14 +492,15 @@ export function ExplorerDebugger(props: ExplorerDebuggerProps): JSX.Element {
                         <div style="margin-bottom:8px; border:1px solid var(--color-border); border-radius:8px; overflow:hidden;">
                           <button
                             onClick={() => { void handleSelectLogical(logicalDb.id); }}
-                            style={`width:100%; text-align:left; border:none; cursor:pointer; padding:10px; display:flex; flex-direction:column; gap:6px; background:${isSelectedLogical() ? "var(--color-bg-selected)" : "var(--color-bg)"}; color:var(--color-text);`}
+                            style={`width:100%; text-align:left; border:none; cursor:pointer; padding:8px; display:flex; flex-direction:column; gap:5px; background:${isSelectedLogical() ? "var(--color-bg-selected)" : "var(--color-bg)"}; color:var(--color-text);`}
                           >
                             <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
-                              <div style="font-weight:600; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                              <div style="font-weight:600; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
                                 {logicalDb.name}
                               </div>
                               <div
-                                style="font-size:11px; color:var(--color-text-secondary); border:1px solid var(--color-border); border-radius:999px; padding:2px 6px;"
+                                class={chipClass}
+                                style="color:var(--color-text-secondary);"
                               >
                                 {logicalDb.openInstanceCount}/{logicalDb.totalInstanceCount}
                               </div>
@@ -550,13 +508,15 @@ export function ExplorerDebugger(props: ExplorerDebuggerProps): JSX.Element {
                             <div style="display:flex; gap:6px; flex-wrap:wrap;">
                               <span
                                 title="RxDB storage adapter name"
-                                style="font-size:11px; color:var(--color-text-secondary); border:1px solid var(--color-border); border-radius:999px; padding:1px 6px;"
+                                class={chipClass}
+                                style="color:var(--color-text-secondary);"
                               >
                                 storage: {logicalDb.storageName}
                               </span>
                               <span
                                 title="Logical database lifecycle status"
-                                style={`font-size:11px; border:1px solid var(--color-border); border-radius:999px; padding:1px 6px; color:${logicalDb.status === "open" ? "var(--color-success)" : "var(--color-text-secondary)"};`}
+                                class={chipClass}
+                                style={`color:${logicalDb.status === "open" ? "var(--color-success)" : "var(--color-text-secondary)"};`}
                               >
                                 state: {logicalDb.status}
                               </span>
@@ -564,7 +524,8 @@ export function ExplorerDebugger(props: ExplorerDebuggerProps): JSX.Element {
                                 title={logicalDb.hasEncryptedFields
                                   ? "This logical database has encrypted schema fields"
                                   : "This logical database has no encrypted schema fields"}
-                                style={`font-size:11px; border:1px solid var(--color-border); border-radius:999px; padding:1px 6px; color:${logicalDb.hasEncryptedFields ? "var(--color-warning)" : "var(--color-text-secondary)"};`}
+                                class={chipClass}
+                                style={`color:${logicalDb.hasEncryptedFields ? "var(--color-warning)" : "var(--color-text-secondary)"};`}
                               >
                                 fields: {logicalDb.hasEncryptedFields ? "encrypted" : "none"}
                               </span>
@@ -572,7 +533,8 @@ export function ExplorerDebugger(props: ExplorerDebuggerProps): JSX.Element {
                                 title={logicalDb.hasEncryptedAttachments
                                   ? "This logical database has encrypted attachments"
                                   : "This logical database has no encrypted attachments"}
-                                style={`font-size:11px; border:1px solid var(--color-border); border-radius:999px; padding:1px 6px; color:${logicalDb.hasEncryptedAttachments ? "var(--color-warning)" : "var(--color-text-secondary)"};`}
+                                class={chipClass}
+                                style={`color:${logicalDb.hasEncryptedAttachments ? "var(--color-warning)" : "var(--color-text-secondary)"};`}
                               >
                                 attachments: {logicalDb.hasEncryptedAttachments ? "encrypted" : "none"}
                               </span>
@@ -580,7 +542,8 @@ export function ExplorerDebugger(props: ExplorerDebuggerProps): JSX.Element {
                                 title={logicalDb.hasPasswordConfigured
                                   ? "A database password was configured at creation"
                                   : "No database password was configured at creation"}
-                                style={`font-size:11px; border:1px solid var(--color-border); border-radius:999px; padding:1px 6px; color:${logicalDb.hasPasswordConfigured ? "var(--color-warning)" : "var(--color-text-secondary)"};`}
+                                class={chipClass}
+                                style={`color:${logicalDb.hasPasswordConfigured ? "var(--color-warning)" : "var(--color-text-secondary)"};`}
                               >
                                 password: {logicalDb.hasPasswordConfigured ? "yes" : "no"}
                               </span>
@@ -589,7 +552,7 @@ export function ExplorerDebugger(props: ExplorerDebuggerProps): JSX.Element {
 
                           <button
                             onClick={() => toggleExpanded(logicalDb.id)}
-                            style="width:100%; border:none; border-top:1px solid var(--color-border); background:var(--color-bg-secondary); color:var(--color-text-secondary); cursor:pointer; font-size:11px; padding:4px 8px; text-align:left;"
+                            style="width:100%; border:none; border-top:1px solid var(--color-border); background:var(--color-bg-secondary); color:var(--color-text-secondary); cursor:pointer; font-size:10px; padding:4px 8px; text-align:left;"
                           >
                             {isExpanded(logicalDb.id) ? "Hide instances" : "Show instances"}
                           </button>
@@ -601,7 +564,7 @@ export function ExplorerDebugger(props: ExplorerDebuggerProps): JSX.Element {
                                   const isSelectedInstance = createMemo(() => selectedInstanceId() === instance.id);
                                   return (
                                     <div
-                                      style={`padding:8px; border:1px solid var(--color-border); border-radius:6px; margin-bottom:6px; background:${isSelectedInstance() ? "var(--color-bg-selected)" : "var(--color-bg)"};`}
+                                      style={`padding:6px; border:1px solid var(--color-border); border-radius:6px; margin-bottom:6px; background:${isSelectedInstance() ? "var(--color-bg-selected)" : "var(--color-bg)"};`}
                                     >
                                       <button
                                         onClick={() => { void handleSelectInstance(instance.id); }}
@@ -615,18 +578,10 @@ export function ExplorerDebugger(props: ExplorerDebuggerProps): JSX.Element {
                                         </span>
                                       </button>
                                       <div style="display:flex; gap:6px; margin-top:6px;">
-                                        <button
-                                          onClick={() => { void handleCloseInstance(instance.id); }}
-                                          disabled={isBusy() || instance.status !== "open"}
-                                          style="font-size:11px; border:1px solid var(--color-border); border-radius:4px; background:var(--color-bg-secondary); color:var(--color-text); padding:3px 6px; cursor:pointer;"
-                                        >
+                                        <button class={controlButtonClass} onClick={() => { void handleCloseInstance(instance.id); }} disabled={isBusy() || instance.status !== "open"}>
                                           Close
                                         </button>
-                                        <button
-                                          onClick={() => { void handleRemoveInstance(instance.id); }}
-                                          disabled={isBusy()}
-                                          style="font-size:11px; border:1px solid var(--color-border); border-radius:4px; background:var(--color-bg-secondary); color:var(--color-error); padding:3px 6px; cursor:pointer;"
-                                        >
+                                        <button class={dangerButtonClass} onClick={() => { void handleRemoveInstance(instance.id); }} disabled={isBusy()}>
                                           Remove
                                         </button>
                                       </div>
@@ -645,26 +600,22 @@ export function ExplorerDebugger(props: ExplorerDebuggerProps): JSX.Element {
             </aside>
 
             <main style="flex:1; display:flex; flex-direction:column; min-width:0;">
-              <div style="padding:10px 12px; border-bottom:1px solid var(--color-border); display:flex; align-items:center; justify-content:space-between; gap:8px;">
+              <div style="padding:8px 10px; border-bottom:1px solid var(--color-border); display:flex; align-items:center; justify-content:space-between; gap:8px;">
                 <div>
-                  <div style="font-size:14px; font-weight:600;">
+                  <div style="font-size:13px; font-weight:600;">
                     {selectedLogical()?.name ?? "No database selected"}
                   </div>
-                  <div style="font-size:12px; color:var(--color-text-secondary);">
+                  <div style="font-size:11px; color:var(--color-text-secondary);">
                     {selectedInstance()
                       ? `Instance ${selectedInstance()!.instanceToken}`
                       : "Select an open instance to inspect"}
                   </div>
                 </div>
                 <div style="display:flex; gap:6px;">
-                  <button
-                    onClick={() => { void refreshInventory(true); }}
-                    disabled={isBusy()}
-                    style="padding:6px 10px; border:1px solid var(--color-border); border-radius:6px; background:var(--color-bg-secondary); color:var(--color-text); cursor:pointer;"
-                  >
+                  <button class={controlButtonClass} onClick={() => { void refreshInventory(true); }} disabled={isBusy()}>
                     Refresh
                   </button>
-                  <button
+                  <button class={controlButtonClass}
                     onClick={() => {
                       const id = selectedInstanceId();
                       if (id) {
@@ -672,11 +623,10 @@ export function ExplorerDebugger(props: ExplorerDebuggerProps): JSX.Element {
                       }
                     }}
                     disabled={isBusy() || !selectedInstance() || selectedInstance()!.status !== "open"}
-                    style="padding:6px 10px; border:1px solid var(--color-border); border-radius:6px; background:var(--color-bg-secondary); color:var(--color-text); cursor:pointer;"
                   >
                     Close Instance
                   </button>
-                  <button
+                  <button class={dangerButtonClass}
                     onClick={() => {
                       const id = selectedInstanceId();
                       if (id) {
@@ -684,7 +634,6 @@ export function ExplorerDebugger(props: ExplorerDebuggerProps): JSX.Element {
                       }
                     }}
                     disabled={isBusy() || !selectedInstance()}
-                    style="padding:6px 10px; border:1px solid var(--color-border); border-radius:6px; background:var(--color-bg-secondary); color:var(--color-error); cursor:pointer;"
                   >
                     Remove Database
                   </button>
