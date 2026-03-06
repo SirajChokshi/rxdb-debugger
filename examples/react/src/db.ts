@@ -1,4 +1,10 @@
-import { createRxDatabase, type RxDatabase } from "rxdb";
+import {
+  createRxDatabase,
+  type RxCollection,
+  type RxDatabase,
+  type RxReplicationPullStreamItem,
+  type WithDeleted,
+} from "rxdb";
 import { wrappedKeyEncryptionCryptoJsStorage } from "rxdb/plugins/encryption-crypto-js";
 import { replicateRxCollection } from "rxdb/plugins/replication";
 import { getRxStorageDexie } from "rxdb/plugins/storage-dexie";
@@ -50,7 +56,7 @@ interface SongsCheckpoint {
   updatedAt: number;
 }
 
-interface MockSongDoc {
+interface MockSongDocData {
   id: string;
   title: string;
   artistId: string;
@@ -63,15 +69,10 @@ interface MockSongDoc {
   releaseDate: string;
   createdAt: number;
   updatedAt: number;
-  _deleted?: boolean;
 }
 
-type MockPullStreamEvent =
-  | "RESYNC"
-  | {
-    documents: MockSongDoc[];
-    checkpoint: SongsCheckpoint | undefined;
-  };
+type MockSongDoc = WithDeleted<MockSongDocData>;
+type MockPullStreamEvent = RxReplicationPullStreamItem<MockSongDocData, SongsCheckpoint>;
 
 interface MockRemoteSongsStore {
   docs: MockSongDoc[];
@@ -82,7 +83,7 @@ interface FriendPresenceCheckpoint {
   updatedAt: number;
 }
 
-interface FriendPresenceDoc {
+interface FriendPresenceDocData {
   id: string;
   friendIndex: number;
   friendName: string;
@@ -92,15 +93,10 @@ interface FriendPresenceDoc {
   currentArtistName: string;
   status: "listening";
   updatedAt: number;
-  _deleted?: boolean;
 }
 
-type FriendPresencePullStreamEvent =
-  | "RESYNC"
-  | {
-    documents: FriendPresenceDoc[];
-    checkpoint: FriendPresenceCheckpoint | undefined;
-  };
+type FriendPresenceDoc = WithDeleted<FriendPresenceDocData>;
+type FriendPresencePullStreamEvent = RxReplicationPullStreamItem<FriendPresenceDocData, FriendPresenceCheckpoint>;
 
 interface MockRemoteFriendPresenceStore {
   tick: number;
@@ -154,7 +150,6 @@ function toCheckpoint(doc: MockSongDoc): SongsCheckpoint {
 function cloneSongDoc(doc: MockSongDoc): MockSongDoc {
   return {
     ...doc,
-    _deleted: !!doc._deleted,
   };
 }
 
@@ -285,7 +280,6 @@ function toFriendPresenceCheckpoint(doc: FriendPresenceDoc): FriendPresenceCheck
 function cloneFriendPresenceDoc(doc: FriendPresenceDoc): FriendPresenceDoc {
   return {
     ...doc,
-    _deleted: !!doc._deleted,
   };
 }
 
@@ -505,7 +499,7 @@ export function setupMockSongsReplication(db: RxDatabase): void {
 
   songsReplicationStarted = true;
 
-  replicateRxCollection<MockSongDoc, SongsCheckpoint>({
+  replicateRxCollection<MockSongDocData, SongsCheckpoint>({
     collection: songsCollection as unknown as never,
     replicationIdentifier: SONGS_REPLICATION_IDENTIFIER,
     live: true,
@@ -584,7 +578,7 @@ export function setupMockFriendPresenceReplication(db: RxDatabase): void {
 
   friendPresenceReplicationStarted = true;
 
-  replicateRxCollection<FriendPresenceDoc, FriendPresenceCheckpoint>({
+  replicateRxCollection<FriendPresenceDocData, FriendPresenceCheckpoint>({
     collection: friendPresenceCollection as unknown as never,
     replicationIdentifier: FRIEND_PRESENCE_REPLICATION_IDENTIFIER,
     live: true,
@@ -624,6 +618,13 @@ export function setupMockFriendPresenceReplication(db: RxDatabase): void {
 export function setupMockReplications(db: RxDatabase): void {
   setupMockSongsReplication(db);
   setupMockFriendPresenceReplication(db);
+}
+
+function getRequiredCollection<T>(collection: RxCollection<T> | undefined, name: string): RxCollection<T> {
+  if (!collection) {
+    throw new Error(`Missing required collection: ${name}`);
+  }
+  return collection;
 }
 
 // ============================================================================
@@ -852,9 +853,17 @@ function getSeedPlaylistCoverUrl(playlistId: string): string {
 
 export async function seedDatabase(db: RxDatabase): Promise<void> {
   const now = Date.now();
+  const artistsCollection = getRequiredCollection(db.collections.artists, "artists");
+  const albumsCollection = getRequiredCollection(db.collections.albums, "albums");
+  const songsCollection = getRequiredCollection(db.collections.songs, "songs");
+  const usersCollection = getRequiredCollection(db.collections.users, "users");
+  const playlistsCollection = getRequiredCollection(db.collections.playlists, "playlists");
+  const playlistSongsCollection = getRequiredCollection(db.collections.playlistSongs, "playlistSongs");
+  const userFollowsCollection = getRequiredCollection(db.collections.userFollows, "userFollows");
+  const userLikesCollection = getRequiredCollection(db.collections.userLikes, "userLikes");
 
   // Seed Artists
-  await db.collections.artists.bulkInsert(
+  await artistsCollection.bulkInsert(
     ARTISTS.map((artist) => ({
       ...artist,
       imageUrl: getArtistImageUrl(artist.id) ?? "",
@@ -863,7 +872,7 @@ export async function seedDatabase(db: RxDatabase): Promise<void> {
   );
 
   // Seed Albums
-  await db.collections.albums.bulkInsert(
+  await albumsCollection.bulkInsert(
     ALBUMS.map((album) => ({
       ...album,
       coverUrl: getAlbumCoverUrl(album.id) ?? "",
@@ -873,7 +882,7 @@ export async function seedDatabase(db: RxDatabase): Promise<void> {
   );
 
   // Seed Songs
-  await db.collections.songs.bulkInsert(
+  await songsCollection.bulkInsert(
     SONGS.map((s) => ({
       ...s,
       isExplicit: Math.random() > 0.8,
@@ -884,12 +893,12 @@ export async function seedDatabase(db: RxDatabase): Promise<void> {
   );
 
   // Seed Users
-  await db.collections.users.bulkInsert(
+  await usersCollection.bulkInsert(
     USERS.map((user) => ({ ...user, avatarUrl: "", createdAt: now, lastActiveAt: now }))
   );
 
   // Seed Playlists
-  await db.collections.playlists.bulkInsert(
+  await playlistsCollection.bulkInsert(
     PLAYLISTS.map((playlist) => ({
       ...playlist,
       coverUrl: getSeedPlaylistCoverUrl(playlist.id),
@@ -899,7 +908,7 @@ export async function seedDatabase(db: RxDatabase): Promise<void> {
   );
 
   // Seed Playlist Songs
-  await db.collections.playlistSongs.bulkInsert(
+  await playlistSongsCollection.bulkInsert(
     PLAYLIST_SONGS.map((ps, i) => ({ ...ps, id: `ps-${i}`, addedAt: now - i * 60000 }))
   );
 
@@ -911,7 +920,7 @@ export async function seedDatabase(db: RxDatabase): Promise<void> {
       userFollows.push({ id: `follow-${user.id}-${artist.id}`, userId: user.id, artistId: artist.id, followedAt: now - Math.random() * 86400000 * 30 });
     }
   }
-  await db.collections.userFollows.bulkInsert(userFollows);
+  await userFollowsCollection.bulkInsert(userFollows);
 
   // Seed User Likes (random likes)
   const userLikes = [];
@@ -921,7 +930,7 @@ export async function seedDatabase(db: RxDatabase): Promise<void> {
       userLikes.push({ id: `like-${user.id}-${song.id}`, userId: user.id, songId: song.id, likedAt: now - Math.random() * 86400000 * 60 });
     }
   }
-  await db.collections.userLikes.bulkInsert(userLikes);
+  await userLikesCollection.bulkInsert(userLikes);
 }
 
 // ============================================================================
