@@ -523,13 +523,66 @@ function Panel() {
                         </div>
                       </div>
                       <div style="display:flex; gap:6px; flex-wrap:wrap;">
-                        <span style="font-size:11px; color:var(--color-text-secondary);">{logicalDb.storageName}</span>
-                        <Show when={logicalDb.hasEncryptedFields || logicalDb.hasEncryptedAttachments}>
-                          <span style="font-size:11px; color:var(--color-warning);">encrypted</span>
-                        </Show>
-                        <span style={`font-size:11px; color:${logicalDb.status === "open" ? "var(--color-success)" : "var(--color-text-secondary)"};`}>
+                        <span style="font-size:11px; color:var(--color-text-secondary); border:1px solid var(--color-border); border-radius:999px; padding:1px 6px;">
+                          {logicalDb.storageName}
+                        </span>
+                        <span style={`font-size:11px; border:1px solid var(--color-border); border-radius:999px; padding:1px 6px; color:${logicalDb.status === "open" ? "var(--color-success)" : "var(--color-text-secondary)"};`}>
                           {logicalDb.status}
                         </span>
+                        <Switch>
+                          <Match when={logicalDb.hasEncryptedFields}>
+                            <span
+                              title="This logical database has encrypted schema fields"
+                              style="font-size:11px; color:var(--color-warning); border:1px solid var(--color-border); border-radius:999px; padding:1px 6px;"
+                            >
+                              fields: encrypted
+                            </span>
+                          </Match>
+                          <Match when={true}>
+                            <span
+                              title="This logical database has no encrypted schema fields"
+                              style="font-size:11px; color:var(--color-text-secondary); border:1px solid var(--color-border); border-radius:999px; padding:1px 6px;"
+                            >
+                              fields: none
+                            </span>
+                          </Match>
+                        </Switch>
+                        <Switch>
+                          <Match when={logicalDb.hasEncryptedAttachments}>
+                            <span
+                              title="This logical database has encrypted attachments"
+                              style="font-size:11px; color:var(--color-warning); border:1px solid var(--color-border); border-radius:999px; padding:1px 6px;"
+                            >
+                              attachments: encrypted
+                            </span>
+                          </Match>
+                          <Match when={true}>
+                            <span
+                              title="This logical database has no encrypted attachments"
+                              style="font-size:11px; color:var(--color-text-secondary); border:1px solid var(--color-border); border-radius:999px; padding:1px 6px;"
+                            >
+                              attachments: none
+                            </span>
+                          </Match>
+                        </Switch>
+                        <Switch>
+                          <Match when={logicalDb.hasPasswordConfigured}>
+                            <span
+                              title="A database password was configured at creation"
+                              style="font-size:11px; color:var(--color-warning); border:1px solid var(--color-border); border-radius:999px; padding:1px 6px;"
+                            >
+                              password: yes
+                            </span>
+                          </Match>
+                          <Match when={true}>
+                            <span
+                              title="No database password was configured at creation"
+                              style="font-size:11px; color:var(--color-text-secondary); border:1px solid var(--color-border); border-radius:999px; padding:1px 6px;"
+                            >
+                              password: no
+                            </span>
+                          </Match>
+                        </Switch>
                       </div>
                     </button>
 
