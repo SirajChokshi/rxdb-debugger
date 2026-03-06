@@ -10,10 +10,18 @@ import { replicateRxCollection } from "rxdb/plugins/replication";
 import { getRxStorageDexie } from "rxdb/plugins/storage-dexie";
 import { installRxdbDebuggerAutoDiscovery } from "@rxdb-debugger/core";
 import { Subject } from "rxjs";
-import { ARTISTS, ALBUMS, SONGS, USERS, PLAYLISTS, PLAYLIST_SONGS } from "./data/index.js";
+import {
+  ARTISTS,
+  ALBUMS,
+  SONGS,
+  USERS,
+  PLAYLISTS,
+  PLAYLIST_SONGS,
+  USER_FRIENDS,
+} from "./data/index.js";
 import { getAlbumCoverUrl, getArtistImageUrl } from "./media";
 
-export { ARTISTS, ALBUMS, SONGS, USERS, PLAYLISTS, PLAYLIST_SONGS };
+export { ARTISTS, ALBUMS, SONGS, USERS, PLAYLISTS, PLAYLIST_SONGS, USER_FRIENDS };
 
 installRxdbDebuggerAutoDiscovery();
 
@@ -22,7 +30,8 @@ const ENABLE_EXAMPLE_ENCRYPTION =
 const EXAMPLE_DB_PASSWORD =
   import.meta.env.VITE_RXDB_DEBUGGER_DB_PASSWORD || "rxdb-debugger-demo-password";
 const EXAMPLE_DATABASE_NAME =
-  ENABLE_EXAMPLE_ENCRYPTION ? "musiccatalog-encrypted" : "musiccatalog";
+  ENABLE_EXAMPLE_ENCRYPTION ? "musiccatalog-graph-encrypted-v2" : "musiccatalog-graph-v2";
+const LOCAL_USER_ID = "user-alice";
 
 function getExampleStorage() {
   const baseStorage = getRxStorageDexie();
@@ -78,52 +87,50 @@ interface MockRemoteSongsStore {
   docs: MockSongDoc[];
 }
 
-interface FriendPresenceCheckpoint {
+interface UsersCheckpoint {
   id: string;
   updatedAt: number;
 }
 
-interface FriendPresenceDocData {
+interface MockUserDocData {
   id: string;
-  friendIndex: number;
-  friendName: string;
+  username: string;
+  email: string;
+  displayName: string;
+  avatarUrl: string;
   avatarColor: string;
-  currentSongId: string;
-  currentSongTitle: string;
-  currentArtistName: string;
-  status: "listening";
+  subscriptionType: "free" | "premium" | "family";
+  country: string;
+  birthDate: string;
+  nowPlayingSongId?: string;
+  nowPlayingUpdatedAt?: number;
+  friendCount: number;
+  createdAt: number;
+  lastActiveAt: number;
   updatedAt: number;
 }
 
-type FriendPresenceDoc = WithDeleted<FriendPresenceDocData>;
-type FriendPresencePullStreamEvent = RxReplicationPullStreamItem<FriendPresenceDocData, FriendPresenceCheckpoint>;
+type MockUserDoc = WithDeleted<MockUserDocData>;
+type UsersPullStreamEvent = RxReplicationPullStreamItem<MockUserDocData, UsersCheckpoint>;
 
-interface MockRemoteFriendPresenceStore {
+interface MockRemoteUsersStore {
   tick: number;
-  docs: FriendPresenceDoc[];
+  docs: MockUserDoc[];
 }
 
 const REMOTE_SONGS_STORAGE_KEY = "rxdb-debugger-mock-remote-songs-v1";
 const SONGS_REPLICATION_IDENTIFIER = "mock-songs-sync";
 const REMOTE_SONG_UPDATE_INTERVAL_MS = 8000;
-const REMOTE_FRIEND_PRESENCE_STORAGE_KEY = "rxdb-debugger-mock-friend-presence-v1";
-const FRIEND_PRESENCE_REPLICATION_IDENTIFIER = "mock-friends-presence-sync";
-const FRIEND_PRESENCE_UPDATE_INTERVAL_MS = 30000;
-const FRIEND_IDENTITIES = [
-  { id: "friend-ava", friendName: "Ava", avatarColor: "#22c55e" },
-  { id: "friend-liam", friendName: "Liam", avatarColor: "#f97316" },
-  { id: "friend-maya", friendName: "Maya", avatarColor: "#a855f7" },
-  { id: "friend-noah", friendName: "Noah", avatarColor: "#06b6d4" },
-  { id: "friend-zoe", friendName: "Zoe", avatarColor: "#eab308" },
-  { id: "friend-leo", friendName: "Leo", avatarColor: "#ef4444" },
-] as const;
+const REMOTE_USERS_STORAGE_KEY = "rxdb-debugger-mock-remote-users-v2";
+const USERS_REPLICATION_IDENTIFIER = "mock-users-sync";
+const USERS_UPDATE_INTERVAL_MS = 30000;
 
 const songsPullStream$ = new Subject<MockPullStreamEvent>();
-const friendPresencePullStream$ = new Subject<FriendPresencePullStreamEvent>();
+const usersPullStream$ = new Subject<UsersPullStreamEvent>();
 let songsSyncInterval: ReturnType<typeof setInterval> | null = null;
-let friendPresenceSyncInterval: ReturnType<typeof setInterval> | null = null;
+let usersSyncInterval: ReturnType<typeof setInterval> | null = null;
 let songsReplicationStarted = false;
-let friendPresenceReplicationStarted = false;
+let usersReplicationStarted = false;
 
 function compareSongsByCheckpoint(a: SongsCheckpoint, b: SongsCheckpoint): number {
   if (a.updatedAt !== b.updatedAt) {
@@ -249,9 +256,9 @@ function emitRemoteSongChange(doc: MockSongDoc): void {
   });
 }
 
-function compareFriendPresenceByCheckpoint(
-  a: FriendPresenceCheckpoint,
-  b: FriendPresenceCheckpoint,
+function compareUsersByCheckpoint(
+  a: UsersCheckpoint,
+  b: UsersCheckpoint,
 ): number {
   if (a.updatedAt !== b.updatedAt) {
     return a.updatedAt - b.updatedAt;
@@ -259,31 +266,31 @@ function compareFriendPresenceByCheckpoint(
   return a.id.localeCompare(b.id);
 }
 
-function isFriendPresenceAfterCheckpoint(
-  doc: FriendPresenceDoc,
-  checkpoint: FriendPresenceCheckpoint | undefined,
+function isUserAfterCheckpoint(
+  doc: MockUserDoc,
+  checkpoint: UsersCheckpoint | undefined,
 ): boolean {
   if (!checkpoint) return true;
-  return compareFriendPresenceByCheckpoint(
+  return compareUsersByCheckpoint(
     { id: doc.id, updatedAt: doc.updatedAt },
     checkpoint,
   ) > 0;
 }
 
-function toFriendPresenceCheckpoint(doc: FriendPresenceDoc): FriendPresenceCheckpoint {
+function toUsersCheckpoint(doc: MockUserDoc): UsersCheckpoint {
   return {
     id: doc.id,
     updatedAt: doc.updatedAt,
   };
 }
 
-function cloneFriendPresenceDoc(doc: FriendPresenceDoc): FriendPresenceDoc {
+function cloneUserDoc(doc: MockUserDoc): MockUserDoc {
   return {
     ...doc,
   };
 }
 
-function normalizeFriendPresenceDoc(data: unknown): FriendPresenceDoc | null {
+function normalizeUserDoc(data: unknown): MockUserDoc | null {
   if (typeof data !== "object" || data === null) {
     return null;
   }
@@ -291,25 +298,43 @@ function normalizeFriendPresenceDoc(data: unknown): FriendPresenceDoc | null {
   const source = data as Record<string, unknown>;
   if (
     typeof source.id !== "string"
-    || typeof source.friendIndex !== "number"
-    || typeof source.friendName !== "string"
-    || typeof source.currentSongId !== "string"
-    || typeof source.currentSongTitle !== "string"
-    || typeof source.currentArtistName !== "string"
+    || typeof source.username !== "string"
+    || typeof source.email !== "string"
+    || typeof source.displayName !== "string"
   ) {
     return null;
   }
 
+  const subscriptionType = source.subscriptionType;
+  const normalizedSubscriptionType =
+    subscriptionType === "free" || subscriptionType === "premium" || subscriptionType === "family"
+      ? subscriptionType
+      : "free";
+  const now = Date.now();
+  const createdAt = typeof source.createdAt === "number" ? source.createdAt : now;
+  const updatedAt = typeof source.updatedAt === "number" ? source.updatedAt : createdAt;
+  const nowPlayingSongId = typeof source.nowPlayingSongId === "string" ? source.nowPlayingSongId : undefined;
+
   return {
     id: source.id,
-    friendIndex: source.friendIndex,
-    friendName: source.friendName,
+    username: source.username,
+    email: source.email,
+    displayName: source.displayName,
+    avatarUrl: typeof source.avatarUrl === "string" ? source.avatarUrl : "",
     avatarColor: typeof source.avatarColor === "string" ? source.avatarColor : "#64748b",
-    currentSongId: source.currentSongId,
-    currentSongTitle: source.currentSongTitle,
-    currentArtistName: source.currentArtistName,
-    status: "listening",
-    updatedAt: typeof source.updatedAt === "number" ? source.updatedAt : Date.now(),
+    subscriptionType: normalizedSubscriptionType,
+    country: typeof source.country === "string" ? source.country : "Unknown",
+    birthDate: typeof source.birthDate === "string" ? source.birthDate : "1970-01-01",
+    ...(nowPlayingSongId ? { nowPlayingSongId } : {}),
+    ...(typeof source.nowPlayingUpdatedAt === "number"
+      ? { nowPlayingUpdatedAt: source.nowPlayingUpdatedAt }
+      : nowPlayingSongId
+        ? { nowPlayingUpdatedAt: updatedAt }
+        : {}),
+    friendCount: typeof source.friendCount === "number" ? source.friendCount : 0,
+    createdAt,
+    lastActiveAt: typeof source.lastActiveAt === "number" ? source.lastActiveAt : updatedAt,
+    updatedAt,
     _deleted: !!source._deleted,
   };
 }
@@ -329,144 +354,106 @@ function getSeedSongByIndex(index: number) {
   return SONGS[index % SONGS.length]!;
 }
 
-function getArtistNameById(artistId: string): string {
-  const artist = ARTISTS.find((entry) => entry.id === artistId);
-  return artist?.name ?? "Unknown Artist";
-}
-
-function createDefaultFriendPresenceDocs(now: number): FriendPresenceDoc[] {
-  return FRIEND_IDENTITIES.map((friend, index) => {
-    const seedSong = getSeedSongByIndex(index * 3 + 1);
-    return {
-      id: friend.id,
-      friendIndex: index,
-      friendName: friend.friendName,
-      avatarColor: friend.avatarColor,
-      currentSongId: seedSong.id,
-      currentSongTitle: seedSong.title,
-      currentArtistName: getArtistNameById(seedSong.artistId),
-      status: "listening",
-      updatedAt: now - index * 1000,
-      _deleted: false,
-    };
-  });
-}
-
-function loadRemoteFriendPresenceStore(): MockRemoteFriendPresenceStore {
-  const now = Date.now();
+function loadRemoteUsersStore(): MockRemoteUsersStore {
   if (typeof localStorage === "undefined") {
-    return {
-      tick: 0,
-      docs: createDefaultFriendPresenceDocs(now),
-    };
+    return { tick: 0, docs: [] };
   }
 
   try {
-    const raw = localStorage.getItem(REMOTE_FRIEND_PRESENCE_STORAGE_KEY);
+    const raw = localStorage.getItem(REMOTE_USERS_STORAGE_KEY);
     if (!raw) {
-      const initialStore: MockRemoteFriendPresenceStore = {
-        tick: 0,
-        docs: createDefaultFriendPresenceDocs(now),
-      };
-      saveRemoteFriendPresenceStore(initialStore);
-      return initialStore;
+      return { tick: 0, docs: [] };
     }
 
     const parsed = JSON.parse(raw) as { tick?: unknown; docs?: unknown };
     const docs = Array.isArray(parsed.docs)
       ? parsed.docs
-        .map(normalizeFriendPresenceDoc)
-        .filter((doc): doc is FriendPresenceDoc => !!doc)
-        .sort((a, b) =>
-          compareFriendPresenceByCheckpoint(
-            toFriendPresenceCheckpoint(a),
-            toFriendPresenceCheckpoint(b),
-          ))
+        .map(normalizeUserDoc)
+        .filter((doc): doc is MockUserDoc => !!doc)
+        .sort((a, b) => compareUsersByCheckpoint(toUsersCheckpoint(a), toUsersCheckpoint(b)))
       : [];
-
-    if (docs.length === 0) {
-      const fallbackStore: MockRemoteFriendPresenceStore = {
-        tick: typeof parsed.tick === "number" ? parsed.tick : 0,
-        docs: createDefaultFriendPresenceDocs(now),
-      };
-      saveRemoteFriendPresenceStore(fallbackStore);
-      return fallbackStore;
-    }
 
     return {
       tick: typeof parsed.tick === "number" ? parsed.tick : 0,
       docs,
     };
   } catch {
-    const fallbackStore: MockRemoteFriendPresenceStore = {
-      tick: 0,
-      docs: createDefaultFriendPresenceDocs(now),
-    };
-    saveRemoteFriendPresenceStore(fallbackStore);
-    return fallbackStore;
+    return { tick: 0, docs: [] };
   }
 }
 
-function saveRemoteFriendPresenceStore(store: MockRemoteFriendPresenceStore): void {
+function saveRemoteUsersStore(store: MockRemoteUsersStore): void {
   if (typeof localStorage === "undefined") {
     return;
   }
 
   localStorage.setItem(
-    REMOTE_FRIEND_PRESENCE_STORAGE_KEY,
+    REMOTE_USERS_STORAGE_KEY,
     JSON.stringify({
       tick: store.tick,
-      docs: store.docs.map(cloneFriendPresenceDoc),
+      docs: store.docs.map(cloneUserDoc),
     }),
   );
 }
 
-function emitFriendPresenceChanges(docs: FriendPresenceDoc[]): void {
+function upsertRemoteUser(store: MockRemoteUsersStore, doc: MockUserDoc): void {
+  const index = store.docs.findIndex((existing) => existing.id === doc.id);
+  if (index >= 0) {
+    store.docs[index] = cloneUserDoc(doc);
+  } else {
+    store.docs.push(cloneUserDoc(doc));
+  }
+}
+
+function emitUserChanges(docs: MockUserDoc[]): void {
   if (docs.length === 0) {
     return;
   }
 
   const sorted = [...docs].sort((a, b) =>
-    compareFriendPresenceByCheckpoint(
-      toFriendPresenceCheckpoint(a),
-      toFriendPresenceCheckpoint(b),
-    ));
+    compareUsersByCheckpoint(toUsersCheckpoint(a), toUsersCheckpoint(b)));
 
-  friendPresencePullStream$.next({
-    documents: sorted.map(cloneFriendPresenceDoc),
-    checkpoint: toFriendPresenceCheckpoint(sorted[sorted.length - 1]!),
+  usersPullStream$.next({
+    documents: sorted.map(cloneUserDoc),
+    checkpoint: toUsersCheckpoint(sorted[sorted.length - 1]!),
   });
 }
 
-function runFriendPresenceMutationTick(): void {
+function runRemoteUserMutationTick(): void {
   const now = Date.now();
-  const store = loadRemoteFriendPresenceStore();
-  store.tick += 1;
+  const store = loadRemoteUsersStore();
+  const activeDocs = store.docs.filter((doc) => !doc._deleted && doc.id !== LOCAL_USER_ID);
+  if (activeDocs.length === 0) {
+    return;
+  }
 
-  const updatedDocs = store.docs.map((doc) => {
+  store.tick += 1;
+  const updatedDocs = activeDocs.map((doc, index) => {
     const deterministicNoise = Math.floor(
-      Math.abs(Math.sin((store.tick + 1) * (doc.friendIndex + 2))) * 1000
+      Math.abs(Math.sin((store.tick + 1) * (index + 2))) * 1000
     );
     const songPoolSize = Math.max(SONGS.length, 1);
     const songIndex = normalizeModulo(
-      store.tick * 5 + doc.friendIndex * 11 + deterministicNoise,
+      store.tick * 5 + index * 11 + deterministicNoise,
       songPoolSize,
     );
     const nextSong = getSeedSongByIndex(songIndex);
 
     return {
       ...doc,
-      currentSongId: nextSong.id,
-      currentSongTitle: nextSong.title,
-      currentArtistName: getArtistNameById(nextSong.artistId),
-      updatedAt: now + doc.friendIndex,
+      nowPlayingSongId: nextSong.id,
+      nowPlayingUpdatedAt: now + index,
+      lastActiveAt: now + index,
+      updatedAt: now + index,
       _deleted: false,
     };
   });
 
-  store.docs = updatedDocs;
-  saveRemoteFriendPresenceStore(store);
-  emitFriendPresenceChanges(updatedDocs);
+  for (const doc of updatedDocs) {
+    upsertRemoteUser(store, doc);
+  }
+  saveRemoteUsersStore(store);
+  emitUserChanges(updatedDocs);
 }
 
 function runRemoteSongMutationTick(): void {
@@ -566,58 +553,98 @@ export function setupMockSongsReplication(db: RxDatabase): void {
   }
 }
 
-export function setupMockFriendPresenceReplication(db: RxDatabase): void {
-  if (friendPresenceReplicationStarted) {
+export function setupMockUsersReplication(db: RxDatabase): void {
+  if (usersReplicationStarted) {
     return;
   }
 
-  const friendPresenceCollection = db.collections.friendPresence;
-  if (!friendPresenceCollection) {
+  const usersCollection = db.collections.users;
+  if (!usersCollection) {
     return;
   }
 
-  friendPresenceReplicationStarted = true;
+  usersReplicationStarted = true;
 
-  replicateRxCollection<FriendPresenceDocData, FriendPresenceCheckpoint>({
-    collection: friendPresenceCollection as unknown as never,
-    replicationIdentifier: FRIEND_PRESENCE_REPLICATION_IDENTIFIER,
+  replicateRxCollection<MockUserDocData, UsersCheckpoint>({
+    collection: usersCollection as unknown as never,
+    replicationIdentifier: USERS_REPLICATION_IDENTIFIER,
     live: true,
     waitForLeadership: false,
     retryTime: 2000,
+    push: {
+      batchSize: 20,
+      handler: async (rows) => {
+        const store = loadRemoteUsersStore();
+        const conflicts: MockUserDoc[] = [];
+        const baseNow = Date.now();
+
+        for (const row of rows) {
+          const nextLocalState = normalizeUserDoc(row.newDocumentState);
+          if (!nextLocalState) {
+            continue;
+          }
+
+          const assumedState = row.assumedMasterState
+            ? normalizeUserDoc(row.assumedMasterState)
+            : null;
+          const remoteCurrent = store.docs.find((doc) => doc.id === nextLocalState.id) ?? null;
+
+          if (remoteCurrent) {
+            const hasConflict = !assumedState || remoteCurrent.updatedAt !== assumedState.updatedAt;
+            if (hasConflict) {
+              conflicts.push(cloneUserDoc(remoteCurrent));
+              continue;
+            }
+          }
+
+          const updatedAt = Math.max(baseNow, nextLocalState.updatedAt);
+          const nextRemoteUser = {
+            ...nextLocalState,
+            updatedAt,
+            lastActiveAt: Math.max(nextLocalState.lastActiveAt, updatedAt),
+            ...(nextLocalState.nowPlayingSongId
+              ? {
+                nowPlayingUpdatedAt: Math.max(
+                  nextLocalState.nowPlayingUpdatedAt ?? updatedAt,
+                  updatedAt,
+                ),
+              }
+              : {}),
+          };
+          upsertRemoteUser(store, nextRemoteUser);
+        }
+
+        saveRemoteUsersStore(store);
+        return conflicts;
+      },
+    },
     pull: {
       batchSize: 20,
       handler: async (checkpoint, batchSize) => {
-        const store = loadRemoteFriendPresenceStore();
+        const store = loadRemoteUsersStore();
         const docs = store.docs
-          .filter((doc) => isFriendPresenceAfterCheckpoint(doc, checkpoint))
-          .sort((a, b) =>
-            compareFriendPresenceByCheckpoint(
-              toFriendPresenceCheckpoint(a),
-              toFriendPresenceCheckpoint(b),
-            ))
+          .filter((doc) => isUserAfterCheckpoint(doc, checkpoint))
+          .sort((a, b) => compareUsersByCheckpoint(toUsersCheckpoint(a), toUsersCheckpoint(b)))
           .slice(0, batchSize)
-          .map(cloneFriendPresenceDoc);
+          .map(cloneUserDoc);
 
         return {
           documents: docs,
-          checkpoint: docs.length > 0 ? toFriendPresenceCheckpoint(docs[docs.length - 1]!) : checkpoint,
+          checkpoint: docs.length > 0 ? toUsersCheckpoint(docs[docs.length - 1]!) : checkpoint,
         };
       },
-      stream$: friendPresencePullStream$.asObservable(),
+      stream$: usersPullStream$.asObservable(),
     },
   });
 
-  if (!friendPresenceSyncInterval) {
-    friendPresenceSyncInterval = setInterval(
-      runFriendPresenceMutationTick,
-      FRIEND_PRESENCE_UPDATE_INTERVAL_MS,
-    );
+  if (!usersSyncInterval) {
+    usersSyncInterval = setInterval(runRemoteUserMutationTick, USERS_UPDATE_INTERVAL_MS);
   }
 }
 
 export function setupMockReplications(db: RxDatabase): void {
   setupMockSongsReplication(db);
-  setupMockFriendPresenceReplication(db);
+  setupMockUsersReplication(db);
 }
 
 function getRequiredCollection<T>(collection: RxCollection<T> | undefined, name: string): RxCollection<T> {
@@ -700,13 +727,32 @@ const userSchema = {
     email: { type: "string" },
     displayName: { type: "string" },
     avatarUrl: { type: "string" },
+    avatarColor: { type: "string" },
     subscriptionType: { type: "string", enum: ["free", "premium", "family"] },
     country: { type: "string" },
     birthDate: { type: "string" },
+    nowPlayingSongId: { type: "string", ref: "songs" },
+    nowPlayingUpdatedAt: { type: "number" },
+    friendCount: { type: "integer" },
     createdAt: { type: "number" },
     lastActiveAt: { type: "number" },
+    updatedAt: { type: "number" },
   },
-  required: ["id", "username", "email", "subscriptionType", "createdAt"],
+  required: [
+    "id",
+    "username",
+    "email",
+    "displayName",
+    "avatarUrl",
+    "avatarColor",
+    "subscriptionType",
+    "country",
+    "birthDate",
+    "friendCount",
+    "createdAt",
+    "lastActiveAt",
+    "updatedAt",
+  ],
 } as const;
 
 const playlistSchema = {
@@ -769,32 +815,18 @@ const userLikeSchema = {
   required: ["id", "userId", "songId", "likedAt"],
 } as const;
 
-const friendPresenceSchema = {
+const userFriendSchema = {
   version: 0,
   primaryKey: "id",
   type: "object",
   properties: {
     id: { type: "string", maxLength: 100 },
-    friendIndex: { type: "integer" },
-    friendName: { type: "string" },
-    avatarColor: { type: "string" },
-    currentSongId: { type: "string", ref: "songs" },
-    currentSongTitle: { type: "string" },
-    currentArtistName: { type: "string" },
-    status: { type: "string", enum: ["listening"] },
-    updatedAt: { type: "number" },
+    userId: { type: "string", ref: "users" },
+    friendId: { type: "string", ref: "users" },
+    position: { type: "integer" },
+    createdAt: { type: "number" },
   },
-  required: [
-    "id",
-    "friendIndex",
-    "friendName",
-    "avatarColor",
-    "currentSongId",
-    "currentSongTitle",
-    "currentArtistName",
-    "status",
-    "updatedAt",
-  ],
+  required: ["id", "userId", "friendId", "position", "createdAt"],
 } as const;
 
 // ============================================================================
@@ -822,7 +854,7 @@ export function getDatabase(): Promise<RxDatabase> {
         playlistSongs: { schema: playlistSongSchema },
         userFollows: { schema: userFollowSchema },
         userLikes: { schema: userLikeSchema },
-        friendPresence: { schema: friendPresenceSchema },
+        userFriends: { schema: userFriendSchema },
       });
 
       return db;
@@ -861,6 +893,12 @@ export async function seedDatabase(db: RxDatabase): Promise<void> {
   const playlistSongsCollection = getRequiredCollection(db.collections.playlistSongs, "playlistSongs");
   const userFollowsCollection = getRequiredCollection(db.collections.userFollows, "userFollows");
   const userLikesCollection = getRequiredCollection(db.collections.userLikes, "userLikes");
+  const userFriendsCollection = getRequiredCollection(db.collections.userFriends, "userFriends");
+  const friendCountByUserId = USER_FRIENDS.reduce<Record<string, number>>((counts, edge) => {
+    counts[edge.userId] = (counts[edge.userId] ?? 0) + 1;
+    counts[edge.friendId] = (counts[edge.friendId] ?? 0) + 1;
+    return counts;
+  }, {});
 
   // Seed Artists
   await artistsCollection.bulkInsert(
@@ -894,7 +932,15 @@ export async function seedDatabase(db: RxDatabase): Promise<void> {
 
   // Seed Users
   await usersCollection.bulkInsert(
-    USERS.map((user) => ({ ...user, avatarUrl: "", createdAt: now, lastActiveAt: now }))
+    USERS.map((user) => ({
+      ...user,
+      avatarUrl: "",
+      friendCount: friendCountByUserId[user.id] ?? 0,
+      createdAt: now,
+      lastActiveAt: now,
+      updatedAt: now,
+      ...(user.nowPlayingSongId ? { nowPlayingUpdatedAt: now } : {}),
+    }))
   );
 
   // Seed Playlists
@@ -931,6 +977,13 @@ export async function seedDatabase(db: RxDatabase): Promise<void> {
     }
   }
   await userLikesCollection.bulkInsert(userLikes);
+
+  await userFriendsCollection.bulkInsert(
+    USER_FRIENDS.map((edge) => ({
+      ...edge,
+      createdAt: now + edge.position,
+    }))
+  );
 }
 
 // ============================================================================

@@ -78,18 +78,30 @@ interface User {
   id: string;
   username: string;
   displayName: string;
+  avatarColor: string;
   subscriptionType: string;
+  nowPlayingSongId?: string;
+  nowPlayingUpdatedAt?: number;
+  lastActiveAt: number;
+  updatedAt: number;
 }
 
-interface FriendPresence {
+interface UserFriend {
   id: string;
-  friendIndex: number;
+  userId: string;
+  friendId: string;
+  position: number;
+  createdAt: number;
+}
+
+interface FriendActivity {
+  id: string;
+  friendId: string;
   friendName: string;
   avatarColor: string;
-  currentSongId: string;
+  currentSongId?: string;
   currentSongTitle: string;
   currentArtistName: string;
-  status: "listening";
   updatedAt: number;
 }
 
@@ -106,6 +118,7 @@ type DebuggerDock = "bottom" | "right";
 const DEBUGGER_MINIMIZED_SIZE = 44;
 const DEBUGGER_MIN_HEIGHT = 200;
 const DEBUGGER_MIN_WIDTH = 300;
+const LOCAL_USER_ID = "user-alice";
 
 type DebuggerWindow = typeof window & {
   __RXDB_DEBUGGER__?: {
@@ -156,7 +169,7 @@ export default function App(): JSX.Element {
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [playlistSongs, setPlaylistSongs] = useState<PlaylistSong[]>([]);
   const [users, setUsers] = useState<User[]>([]);
-  const [friendPresence, setFriendPresence] = useState<FriendPresence[]>([]);
+  const [userFriends, setUserFriends] = useState<UserFriend[]>([]);
 
   const [selectedArtist, setSelectedArtist] = useState<Artist | null>(null);
   const [selectedPlaylistId, setSelectedPlaylistId] = useState<string | null>(null);
@@ -234,10 +247,10 @@ export default function App(): JSX.Element {
       "songs",
       "playlists",
       "users",
+      "userFriends",
       "playlistSongs",
       "userFollows",
       "userLikes",
-      "friendPresence",
     ];
 
     for (const colName of collections) {
@@ -312,11 +325,11 @@ export default function App(): JSX.Element {
 
   useEffect(() => {
     if (!db) return;
-    const sub = db.collections["friendPresence"]?.find().$.subscribe((docs: unknown[]) => {
+    const sub = db.collections["userFriends"]?.find().$.subscribe((docs: unknown[]) => {
       const next = docs
-        .map((d: unknown) => (d as { toJSON: (flag: boolean) => FriendPresence }).toJSON(true))
-        .sort((a, b) => a.friendIndex - b.friendIndex);
-      setFriendPresence(next);
+        .map((d: unknown) => (d as { toJSON: (flag: boolean) => UserFriend }).toJSON(true))
+        .sort((a, b) => a.position - b.position);
+      setUserFriends(next);
     });
     return () => sub?.unsubscribe();
   }, [db]);
@@ -397,8 +410,8 @@ export default function App(): JSX.Element {
     };
   }, [db, showDebugger, isMinimized]);
 
-  const currentUser = users[0] || null;
-  const currentUserId = currentUser?.id || "user-local";
+  const currentUser = users.find((user) => user.id === LOCAL_USER_ID) || null;
+  const currentUserId = currentUser?.id || LOCAL_USER_ID;
 
   const handleSeed = useCallback(async () => {
     if (!db || isSeeding) return;
@@ -414,7 +427,7 @@ export default function App(): JSX.Element {
   const handleClear = useCallback(async () => {
     if (!db) return;
     const collections = [
-      "friendPresence",
+      "userFriends",
       "playlistSongs",
       "userFollows",
       "userLikes",
@@ -438,7 +451,7 @@ export default function App(): JSX.Element {
     setCreatePlaylistOpen(false);
     setNewPlaylistName("");
     setEvents([]);
-    setFriendPresence([]);
+    setUserFriends([]);
   }, [db]);
 
   const handleCreatePlaylist = useCallback(async () => {
@@ -538,6 +551,31 @@ export default function App(): JSX.Element {
     }
   }, [albums, db, playlistSongs, songs]);
 
+  const handlePlaySong = useCallback(async (song: Song) => {
+    setCurrentSong(song);
+    if (!db) return;
+
+    const currentUserDoc = await db.collections["users"]?.findOne(currentUserId).exec();
+    if (!currentUserDoc) {
+      return;
+    }
+
+    const now = Date.now();
+    await (currentUserDoc as {
+      incrementalPatch: (nextPatch: {
+        nowPlayingSongId: string;
+        nowPlayingUpdatedAt: number;
+        lastActiveAt: number;
+        updatedAt: number;
+      }) => Promise<void>;
+    }).incrementalPatch({
+      nowPlayingSongId: song.id,
+      nowPlayingUpdatedAt: now,
+      lastActiveAt: now,
+      updatedAt: now,
+    });
+  }, [currentUserId, db]);
+
   const disableLayoutTransitionsTemporarily = useCallback(() => {
     setAllowLayoutTransitions(false);
     requestAnimationFrame(() => {
@@ -594,6 +632,29 @@ export default function App(): JSX.Element {
   const artistSongs = selectedArtist ? songs.filter(s => s.artistId === selectedArtist.id) : [];
   const artistAlbums = selectedArtist ? albums.filter(a => a.artistId === selectedArtist.id) : [];
   const selectedPlaylist = selectedPlaylistId ? playlists.find((playlist) => playlist.id === selectedPlaylistId) || null : null;
+  const userById = new Map(users.map((user) => [user.id, user]));
+  const songById = new Map(songs.map((song) => [song.id, song]));
+  const friendActivities: FriendActivity[] = userFriends
+    .filter((edge) => edge.userId === currentUserId)
+    .sort((a, b) => a.position - b.position)
+    .flatMap((edge) => {
+      const friend = userById.get(edge.friendId);
+      if (!friend) {
+        return [];
+      }
+
+      const currentSong = friend.nowPlayingSongId ? songById.get(friend.nowPlayingSongId) : undefined;
+      return [{
+        id: edge.id,
+        friendId: friend.id,
+        friendName: friend.displayName,
+        avatarColor: friend.avatarColor,
+        currentSongId: currentSong?.id,
+        currentSongTitle: currentSong?.title ?? "Nothing queued",
+        currentArtistName: currentSong ? getArtistName(currentSong.artistId) : "Offline",
+        updatedAt: friend.nowPlayingUpdatedAt ?? friend.updatedAt ?? friend.lastActiveAt,
+      }];
+    });
 
   // Stats for the debugger header
   const stats = {
@@ -602,9 +663,9 @@ export default function App(): JSX.Element {
     songs: songs.length,
     playlists: playlists.length,
     users: users.length,
-    friendPresence: friendPresence.length,
+    userFriends: userFriends.length,
   };
-  const totalDocs = stats.artists + stats.albums + stats.songs + stats.playlists + stats.users + stats.friendPresence;
+  const totalDocs = stats.artists + stats.albums + stats.songs + stats.playlists + stats.users + stats.userFriends;
   const recentEvents = events.slice(0, 5);
   const debuggerReservedWidth =
     showDebugger && debuggerDock === "right"
@@ -724,7 +785,7 @@ export default function App(): JSX.Element {
         >
           {/* Main Content */}
           <main className="flex-1 overflow-y-auto bg-linear-to-b from-neutral-900 to-black">
-            {activeView === "home" && <HomeView artists={artists} albums={albums} songs={songs} onPlaySong={setCurrentSong} onSelectArtist={(a) => { setSelectedArtist(a); setActiveView("artists"); }} />}
+            {activeView === "home" && <HomeView artists={artists} albums={albums} songs={songs} onPlaySong={(song) => { void handlePlaySong(song); }} onSelectArtist={(a) => { setSelectedArtist(a); setActiveView("artists"); }} />}
             {activeView === "artists" && !selectedArtist && <ArtistsGrid artists={artists} onSelect={setSelectedArtist} />}
             {activeView === "artists" && selectedArtist && (
               <ArtistDetail
@@ -732,12 +793,12 @@ export default function App(): JSX.Element {
                 albums={artistAlbums}
                 songs={artistSongs}
                 onBack={() => setSelectedArtist(null)}
-                onPlaySong={setCurrentSong}
+                onPlaySong={(song) => { void handlePlaySong(song); }}
                 currentSong={currentSong}
               />
             )}
             {activeView === "albums" && <AlbumsGrid albums={albums} getArtistName={getArtistName} />}
-            {activeView === "songs" && <SongsView songs={songs} getArtistName={getArtistName} getAlbumTitle={getAlbumTitle} onPlaySong={setCurrentSong} currentSong={currentSong} />}
+            {activeView === "songs" && <SongsView songs={songs} getArtistName={getArtistName} getAlbumTitle={getAlbumTitle} onPlaySong={(song) => { void handlePlaySong(song); }} currentSong={currentSong} />}
             {activeView === "playlists" && !selectedPlaylist && (
               <PlaylistsView
                 playlists={playlists}
@@ -755,7 +816,7 @@ export default function App(): JSX.Element {
                 getAlbumTitle={getAlbumTitle}
                 getUserName={getUserName}
                 onBack={() => setSelectedPlaylistId(null)}
-                onPlaySong={setCurrentSong}
+                onPlaySong={(song) => { void handlePlaySong(song); }}
                 currentSong={currentSong}
                 onAddSongToPlaylist={handleAddSongToPlaylist}
                 onRemoveSongFromPlaylist={handleRemoveSongFromPlaylist}
@@ -764,7 +825,7 @@ export default function App(): JSX.Element {
             <MediaAttributionFooter />
           </main>
           <FriendsSidebar
-            friendPresence={friendPresence}
+            friendActivities={friendActivities}
             isCollapsed={isFriendsCollapsed}
             onToggle={() => setIsFriendsCollapsed((prev) => !prev)}
           />
@@ -1094,11 +1155,11 @@ function MediaAttributionFooter() {
 }
 
 function FriendsSidebar({
-  friendPresence,
+  friendActivities,
   isCollapsed,
   onToggle,
 }: {
-  friendPresence: FriendPresence[];
+  friendActivities: FriendActivity[];
   isCollapsed: boolean;
   onToggle: () => void;
 }) {
@@ -1125,7 +1186,7 @@ function FriendsSidebar({
 
       {isCollapsed ? (
         <div className="flex flex-col items-center gap-2 pt-3">
-          {friendPresence.slice(0, 6).map((friend) => (
+          {friendActivities.slice(0, 6).map((friend) => (
             <div
               key={friend.id}
               className="w-7 h-7 rounded-full text-[11px] font-semibold text-white flex items-center justify-center"
@@ -1138,13 +1199,13 @@ function FriendsSidebar({
         </div>
       ) : (
         <div className="overflow-y-auto h-[calc(100%-53px)] p-3">
-          {friendPresence.length === 0 ? (
+          {friendActivities.length === 0 ? (
             <div className="rounded-lg border border-dashed border-neutral-700 p-4 text-xs text-neutral-400">
-              Friend presence data is syncing…
+              Friend graph data is syncing…
             </div>
           ) : (
             <div className="space-y-2">
-              {friendPresence.map((friend) => (
+              {friendActivities.map((friend) => (
                 <div
                   key={friend.id}
                   className="rounded-lg border border-neutral-800 bg-neutral-900/70 p-3"
@@ -1160,7 +1221,9 @@ function FriendsSidebar({
                       <div className="text-sm font-semibold text-white truncate">
                         {friend.friendName}
                       </div>
-                      <div className="text-[11px] text-green-400">Listening now</div>
+                      <div className="text-[11px] text-green-400">
+                        {friend.currentSongId ? "Listening now" : "Recently active"}
+                      </div>
                     </div>
                   </div>
                   <div className="text-xs text-white truncate">♪ {friend.currentSongTitle}</div>
