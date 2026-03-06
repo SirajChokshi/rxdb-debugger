@@ -389,7 +389,7 @@ function createRemoteFindOne(
 /**
  * Check if the page has a debugger auto-discovery registry exposed.
  */
-export async function waitForRegistry(maxAttempts = 8): Promise<boolean> {
+export async function waitForRegistry(maxAttempts = 20): Promise<boolean> {
   for (let i = 0; i < maxAttempts; i++) {
     try {
       const hasRegistry = await evalInPage<boolean>(
@@ -399,7 +399,7 @@ export async function waitForRegistry(maxAttempts = 8): Promise<boolean> {
     } catch {
       // Continue waiting
     }
-    await new Promise((r) => setTimeout(r, 250));
+    await new Promise((r) => setTimeout(r, 500));
   }
   return false;
 }

@@ -36,6 +36,28 @@ function applyThemeToBody(theme: "dark" | "light") {
   document.body.classList.add(theme === "dark" ? "theme-dark" : "theme-light");
 }
 
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  timeoutMessage: string,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timeoutId = window.setTimeout(() => {
+      reject(new Error(timeoutMessage));
+    }, timeoutMs);
+
+    promise
+      .then((value) => {
+        window.clearTimeout(timeoutId);
+        resolve(value);
+      })
+      .catch((error) => {
+        window.clearTimeout(timeoutId);
+        reject(error);
+      });
+  });
+}
+
 function getStyles() {
   const isDark = getDevToolsTheme() === "dark";
 
@@ -198,10 +220,18 @@ function Panel() {
     if (generation !== connectGeneration) return;
 
     try {
-      await initBridge(instanceId);
+      await withTimeout(
+        initBridge(instanceId),
+        5000,
+        "Timed out while initializing the RxDB bridge",
+      );
       if (generation !== connectGeneration) return;
 
-      const remoteDb = await createRemoteDatabase(instanceId);
+      const remoteDb = await withTimeout(
+        createRemoteDatabase(instanceId),
+        8000,
+        "Timed out while connecting to the selected RxDB instance",
+      );
       if (generation !== connectGeneration) return;
 
       if (!debuggerContainerRef) {
@@ -227,7 +257,11 @@ function Panel() {
     setStatus("loading");
 
     try {
-      const hasRegistry = await waitForRegistry();
+      const hasRegistry = await withTimeout(
+        waitForRegistry(),
+        12000,
+        "Timed out while discovering the RxDB debugger registry",
+      );
       if (!hasRegistry) {
         await disconnectDebugger();
         setLogicalDatabases([]);
@@ -238,8 +272,16 @@ function Panel() {
         return;
       }
 
-      const nextLogicalDatabases = await listRemoteLogicalDatabases();
-      const nextInstances = await listRemoteDatabaseInstances();
+      const nextLogicalDatabases = await withTimeout(
+        listRemoteLogicalDatabases(),
+        6000,
+        "Timed out while loading logical databases",
+      );
+      const nextInstances = await withTimeout(
+        listRemoteDatabaseInstances(),
+        6000,
+        "Timed out while loading database instances",
+      );
 
       setLogicalDatabases(nextLogicalDatabases);
       setInstances(nextInstances);
