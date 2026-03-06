@@ -2,15 +2,7 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "jsx": "react-jsx",
-    "baseUrl": ".",
-    "paths": {
-      "@rxdb-debugger/core": [
-        "../../packages/core/src/index.ts"
-      ],
-      "@rxdb-debugger/ui": [
-        "../../packages/ui/src/index.ts"
-      ]
-    }
+    "baseUrl": "."
   },
   "include": [
     "src"
