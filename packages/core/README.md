@@ -78,6 +78,79 @@ const unmount = mountDebugger({
 unmount();
 ```
 
+### Mounted Explorer UI (Feature Parity with Extension)
+
+If you want the same database explorer shell used by the DevTools extension (logical DBs, instances, close/remove actions), mount the explorer UI:
+
+```typescript
+import { mountExplorerDebugger } from "rxdb-debugger/ui";
+
+const unmount = mountExplorerDebugger({
+  container: "#debug-panel",
+  adapter: {
+    async isRegistryAvailable() {
+      return typeof window.__RXDB_DEBUGGER__?.snapshot === "function";
+    },
+    async listLogicalDatabases() {
+      return Object.values(window.__RXDB_DEBUGGER__.snapshot().logicalDatabases);
+    },
+    async listInstances(logicalDatabaseId) {
+      const instances = Object.values(window.__RXDB_DEBUGGER__.snapshot().instances);
+      return logicalDatabaseId
+        ? instances.filter((instance) => instance.logicalDatabaseId === logicalDatabaseId)
+        : instances;
+    },
+    async connectToInstance(instanceId) {
+      return window.__RXDB_DEBUGGER__.getInstanceHandle(instanceId);
+    },
+    async closeInstance(instanceId) {
+      return window.__RXDB_DEBUGGER__.closeInstance(instanceId);
+    },
+    async removeInstance(instanceId) {
+      return window.__RXDB_DEBUGGER__.removeInstance(instanceId);
+    },
+  },
+  shellTheme: "auto",
+  inspectorTheme: "auto",
+});
+```
+
+### Chrome Extension Auto-Discovery (No Manual Window Handles)
+
+To let the DevTools extension discover and manage all RxDB databases automatically, install the auto-discovery plugin once before creating databases:
+
+```typescript
+import { addRxPlugin } from "rxdb/plugins/core";
+import { createRxdbDebuggerAutoDiscoveryPlugin } from "rxdb-debugger";
+
+addRxPlugin(createRxdbDebuggerAutoDiscoveryPlugin());
+```
+
+If you prefer a helper that is safe to call more than once:
+
+```typescript
+import { installRxdbDebuggerAutoDiscovery } from "rxdb-debugger";
+
+installRxdbDebuggerAutoDiscovery();
+```
+
+With auto-discovery enabled, the extension can:
+- detect multiple logical databases
+- show multiple active instances/handles per database
+- close/remove databases from the explorer UI
+
+No `window.__rxdb_handle` assignment is required.
+
+### Encryption Metadata Productization
+
+The auto-discovery registry includes non-secret encryption metadata so the extension can show encryption badges without manual wiring:
+
+- whether a database password is configured
+- whether any collection has encrypted fields
+- whether any collection uses encrypted attachments
+
+This metadata is derived from RxDB schema and creation options only. Raw password values are never exposed through the registry.
+
 ## API Reference
 
 ### RxdbDebugger

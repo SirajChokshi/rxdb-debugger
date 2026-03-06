@@ -1,233 +1,100 @@
-import { createSignal, Match, Switch, onMount, onCleanup } from "solid-js";
-import { render } from "solid-js/web";
-import { mountDebugger } from "@rxdb-debugger/ui";
-import { createRemoteDatabase, waitForDatabase } from "./remote-db";
-import { initBridge, disposeBridge } from "./bridge";
+import { mountExplorerDebugger, type ExplorerDebuggerAdapter, type ThemeMode } from "@rxdb-debugger/ui";
+import {
+  closeRemoteDatabaseInstance,
+  createRemoteDatabase,
+  listRemoteDatabaseInstances,
+  listRemoteLogicalDatabases,
+  removeRemoteDatabaseInstance,
+  waitForRegistry,
+} from "./remote-db";
+import { disposeBridge, initBridge } from "./bridge";
 import "./styles.css";
 
-type State =
-  | { status: "loading" }
-  | { status: "no-database" }
-  | { status: "error"; message: string }
-  | { status: "connected" };
-
-/**
- * Detects the DevTools theme using chrome.devtools.panels.themeName.
- * Returns "dark" or "light" based on the current DevTools theme.
- */
-function getDevToolsTheme(): "dark" | "light" {
+function getDevToolsTheme(): "light" | "dark" {
   try {
-    // chrome.devtools.panels.themeName returns "dark" or "default"
     const themeName = chrome.devtools?.panels?.themeName;
     return themeName === "dark" ? "dark" : "light";
   } catch {
-    // Fallback to checking prefers-color-scheme if DevTools API unavailable
     return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   }
 }
 
-function applyThemeToBody(theme: "dark" | "light") {
-  document.body.classList.remove("theme-dark", "theme-light");
-  document.body.classList.add(theme === "dark" ? "theme-dark" : "theme-light");
-}
-
-function getStyles() {
-  const isDark = getDevToolsTheme() === "dark";
-
+function createExtensionAdapter(): ExplorerDebuggerAdapter {
   return {
-    container: `
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      height: 100vh;
-      text-align: center;
-      padding: 32px;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    `,
-    icon: "font-size: 48px; margin-bottom: 16px;",
-    title: `margin: 0 0 8px; font-size: 18px; color: ${isDark ? "#e4e4ef" : "#1f2328"};`,
-    subtitle: `margin: 0 0 16px; color: ${isDark ? "#9898a8" : "#57606a"}; font-size: 14px;`,
-    code: `background: ${isDark ? "#2a2a3a" : "#eaeef2"}; padding: 2px 6px; border-radius: 4px; font-family: monospace;`,
-    pre: `
-      background: ${isDark ? "#16161d" : "#f6f8fa"};
-      padding: 16px;
-      border-radius: 8px;
-      font-size: 12px;
-      color: ${isDark ? "#4ade80" : "#1a7f37"};
-      text-align: left;
-      font-family: monospace;
-    `,
-    button: `
-      margin-top: 16px;
-      padding: 8px 16px;
-      background: #8b7cf7;
-      color: white;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 14px;
-    `,
-    errorTitle: `margin: 0 0 8px; font-size: 18px; color: ${isDark ? "#f87171" : "#cf222e"};`,
-    loading: `color: ${isDark ? "#9898a8" : "#57606a"};`,
+    async isRegistryAvailable() {
+      return waitForRegistry();
+    },
+    async listLogicalDatabases() {
+      return listRemoteLogicalDatabases();
+    },
+    async listInstances(logicalDatabaseId?: string) {
+      return listRemoteDatabaseInstances(logicalDatabaseId);
+    },
+    async connectToInstance(instanceId: string) {
+      await initBridge(instanceId);
+      return createRemoteDatabase(instanceId);
+    },
+    async disconnect() {
+      await disposeBridge();
+    },
+    async closeInstance(instanceId: string) {
+      return closeRemoteDatabaseInstance(instanceId);
+    },
+    async removeInstance(instanceId: string) {
+      return removeRemoteDatabaseInstance(instanceId);
+    },
   };
 }
 
-function LoadingScreen() {
-  const styles = getStyles();
-  return (
-    <div style={styles.container}>
-      <div style={styles.loading}>Connecting to RxDB...</div>
-    </div>
-  );
-}
+const root = document.getElementById("root");
 
-function NoDatabase(props: { onRetry: () => void }) {
-  const styles = getStyles();
-  return (
-    <div style={styles.container}>
-      <div style={styles.icon}>🔍</div>
-      <h2 style={styles.title}>No RxDB Handle Found</h2>
-      <p style={styles.subtitle}>
-        Make sure <code style={styles.code}>window.__rxdb_handle</code> is set
-        to your RxDB database instance.
-      </p>
-      <pre style={styles.pre}>
-        {`const db = await createRxDatabase({...});
-window.__rxdb_handle = db;`}
-      </pre>
-      <button style={styles.button} onClick={props.onRetry}>
-        Retry
-      </button>
-    </div>
-  );
-}
+if (root) {
+  const setupSnippet = `import { addRxPlugin } from "rxdb/plugins/core";
+import { createRxdbDebuggerAutoDiscoveryPlugin } from "@rxdb-debugger/core";
 
-function ErrorScreen(props: { message: string }) {
-  const styles = getStyles();
-  return (
-    <div style={styles.container}>
-      <div style={styles.icon}>❌</div>
-      <h2 style={styles.errorTitle}>Error connecting to database</h2>
-      <p style={styles.subtitle}>{props.message}</p>
-    </div>
-  );
-}
+addRxPlugin(createRxdbDebuggerAutoDiscoveryPlugin());`;
 
-function Panel() {
-  const [state, setState] = createSignal<State>({ status: "loading" });
-  let containerRef: HTMLDivElement | undefined;
-  let debuggerCleanup: (() => void) | null = null;
-  let connectGeneration = 0;
+  let cleanup: (() => void) | null = null;
+  let lastTheme: ThemeMode = getDevToolsTheme();
 
-  async function connect() {
-    const generation = ++connectGeneration;
+  const mount = () => {
+    cleanup?.();
+    cleanup = mountExplorerDebugger({
+      container: root,
+      adapter: createExtensionAdapter(),
+      shellTheme: lastTheme,
+      inspectorTheme: () => getDevToolsTheme(),
+      initialPanel: "collections",
+      trackPerformance: false,
+      setupSnippet,
+      height: "100vh",
+    });
+  };
 
-    // Cleanup any previous instance
-    if (debuggerCleanup) {
-      debuggerCleanup();
-      debuggerCleanup = null;
-    }
-    await disposeBridge();
-    if (generation !== connectGeneration) return;
+  const handleNavigated = () => {
+    mount();
+  };
 
-    setState({ status: "loading" });
-
-    const hasDb = await waitForDatabase();
-    if (generation !== connectGeneration) return;
-    if (!hasDb) {
-      setState({ status: "no-database" });
+  const handleVisibilityChange = () => {
+    if (document.visibilityState !== "visible") {
       return;
     }
-
-    try {
-      // Initialize the event bridge
-      await initBridge();
-      if (generation !== connectGeneration) return;
-
-      const remoteDb = await createRemoteDatabase();
-      if (generation !== connectGeneration) return;
-      setState({ status: "connected" });
-
-      if (containerRef) {
-        // Use DevTools theme API for extension panels
-        const theme = getDevToolsTheme();
-        debuggerCleanup = mountDebugger({
-          container: containerRef,
-          db: remoteDb,
-          theme,
-        });
-      }
-    } catch (err) {
-      if (generation !== connectGeneration) return;
-      setState({
-        status: "error",
-        message: err instanceof Error ? err.message : String(err),
-      });
+    const currentTheme = getDevToolsTheme();
+    if (currentTheme !== lastTheme) {
+      lastTheme = currentTheme;
+      mount();
     }
-  }
+  };
 
-  onMount(() => {
-    let lastTheme = getDevToolsTheme();
+  mount();
+  chrome.devtools.network.onNavigated.addListener(handleNavigated);
+  document.addEventListener("visibilitychange", handleVisibilityChange);
 
-    applyThemeToBody(lastTheme);
-    void connect();
-
-    // Listen for page navigation/reload
-    const handleNavigated = () => {
-      void connect();
-    };
-    chrome.devtools.network.onNavigated.addListener(handleNavigated);
-
-    // Check for theme changes when panel becomes visible
-    // (DevTools was closed and reopened with different theme)
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        const currentTheme = getDevToolsTheme();
-        if (currentTheme !== lastTheme) {
-          lastTheme = currentTheme;
-          applyThemeToBody(currentTheme);
-          // Theme changed, reconnect to apply new theme
-          void connect();
-        }
-      }
-    };
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-
-    onCleanup(() => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      chrome.devtools.network.onNavigated.removeListener(handleNavigated);
-    });
+  window.addEventListener("beforeunload", () => {
+    document.removeEventListener("visibilitychange", handleVisibilityChange);
+    chrome.devtools.network.onNavigated.removeListener(handleNavigated);
+    cleanup?.();
+    cleanup = null;
   });
-
-  onCleanup(() => {
-    connectGeneration += 1;
-    if (debuggerCleanup) {
-      debuggerCleanup();
-    }
-    void disposeBridge();
-  });
-
-  return (
-    <Switch>
-      <Match when={state().status === "loading"}>
-        <LoadingScreen />
-      </Match>
-      <Match when={state().status === "no-database"}>
-        <NoDatabase onRetry={() => { void connect(); }} />
-      </Match>
-      <Match when={state().status === "error"}>
-        <ErrorScreen message={(state() as { message: string }).message} />
-      </Match>
-      <Match when={state().status === "connected"}>
-        <div ref={containerRef} style="width: 100%; height: 100vh;" />
-      </Match>
-    </Switch>
-  );
 }
 
-const root = document.getElementById("root");
-if (root) {
-  render(() => <Panel />, root);
-}

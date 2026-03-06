@@ -77,6 +77,36 @@ The example configures mock replication for `songs` and `friendPresence`. Open t
 
 The right-side friends rail updates every ~30 seconds using replicated presence documents.
 
+## Chrome DevTools Extension Integration
+
+This example installs the RxDB Debugger auto-discovery plugin at startup via:
+
+```ts
+installRxdbDebuggerAutoDiscovery();
+```
+
+That means the extension can discover databases and instances automatically, without assigning a database to `window`.
+
+If you open multiple handles to the same underlying database, the extension groups them under one logical database and shows each handle as a separate instance.
+
+## Optional Encryption Demo Mode
+
+The example can run with encrypted fields so you can validate debugger metadata chips and encrypted document reads through an open database handle.
+
+Set these environment variables before starting the app:
+
+```bash
+VITE_RXDB_DEBUGGER_ENABLE_ENCRYPTION=true
+VITE_RXDB_DEBUGGER_DB_PASSWORD=your-local-dev-password
+```
+
+In encryption mode, the example encrypts:
+- `artists.bio`
+- `users.email`
+- `users.birthDate`
+
+The DevTools explorer will show encryption/password metadata badges. The password itself is not exposed in debugger metadata.
+
 ## Project Structure
 
 ```

@@ -1,6 +1,10 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import type { RxDatabase, RxChangeEvent } from "rxdb";
-import type { RxdbDebugger } from "@rxdb-debugger/core";
+import type {
+  ExplorerDatabaseInstance,
+  ExplorerDebuggerAdapter,
+  ExplorerLogicalDatabase,
+} from "@rxdb-debugger/ui";
 import { Menu } from "@base-ui/react/menu";
 import {
   getDatabase,
@@ -101,6 +105,18 @@ const DEBUGGER_MINIMIZED_SIZE = 44;
 const DEBUGGER_MIN_HEIGHT = 200;
 const DEBUGGER_MIN_WIDTH = 300;
 
+type DebuggerWindow = typeof window & {
+  __RXDB_DEBUGGER__?: {
+    snapshot: () => {
+      logicalDatabases: Record<string, ExplorerLogicalDatabase>;
+      instances: Record<string, ExplorerDatabaseInstance>;
+    };
+    getInstanceHandle: (id: string) => RxDatabase | null;
+    closeInstance: (id: string) => Promise<boolean>;
+    removeInstance: (id: string) => Promise<boolean>;
+  };
+};
+
 // ============================================================================
 // APP
 // ============================================================================
@@ -147,7 +163,6 @@ export default function App(): JSX.Element {
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
 
   const debuggerRef = useRef<HTMLDivElement>(null);
-  const debuggerInstanceRef = useRef<RxdbDebugger | null>(null);
   const isResizingRef = useRef(false);
 
   // Persist debugger state
@@ -316,18 +331,60 @@ export default function App(): JSX.Element {
     if (!debuggerRef.current || !db || !showDebugger || isMinimized) return;
     let unmount: (() => void) | undefined;
 
-    Promise.all([
-      import("@rxdb-debugger/core"),
-      import("@rxdb-debugger/ui"),
-    ]).then(([{ RxdbDebugger }, { mountDebugger }]) => {
+    const adapter: ExplorerDebuggerAdapter = {
+      async isRegistryAvailable() {
+        const registry = (window as DebuggerWindow).__RXDB_DEBUGGER__;
+        return Boolean(registry && typeof registry.snapshot === "function");
+      },
+      async listLogicalDatabases() {
+        const registry = (window as DebuggerWindow).__RXDB_DEBUGGER__;
+        const logicalDatabases = registry?.snapshot().logicalDatabases ?? {};
+        return Object.values(logicalDatabases);
+      },
+      async listInstances(logicalDatabaseId?: string) {
+        const registry = (window as DebuggerWindow).__RXDB_DEBUGGER__;
+        const instances = Object.values(
+          registry?.snapshot().instances ?? {}
+        );
+        if (!logicalDatabaseId) {
+          return instances;
+        }
+        return instances.filter((entry) => entry.logicalDatabaseId === logicalDatabaseId);
+      },
+      async connectToInstance(instanceId: string) {
+        const registry = (window as DebuggerWindow).__RXDB_DEBUGGER__;
+        const handle = registry?.getInstanceHandle(instanceId) ?? null;
+        if (!handle) {
+          throw new Error("Unable to connect to selected database instance");
+        }
+        return handle;
+      },
+      async disconnect() {
+        return;
+      },
+      async closeInstance(instanceId: string) {
+        const registry = (window as DebuggerWindow).__RXDB_DEBUGGER__;
+        if (!registry) {
+          return false;
+        }
+        return registry.closeInstance(instanceId);
+      },
+      async removeInstance(instanceId: string) {
+        const registry = (window as DebuggerWindow).__RXDB_DEBUGGER__;
+        if (!registry) {
+          return false;
+        }
+        return registry.removeInstance(instanceId);
+      },
+    };
+
+    import("@rxdb-debugger/ui").then(({ mountExplorerDebugger }) => {
       if (!debuggerRef.current) return;
-      const debuggerInstance = new RxdbDebugger({ db, trackPerformance: true });
-      debuggerInstance.performance.start();
-      debuggerInstanceRef.current = debuggerInstance;
-      unmount = mountDebugger({
+      unmount = mountExplorerDebugger({
         container: debuggerRef.current,
-        db,
-        theme: "auto",
+        adapter,
+        shellTheme: "auto",
+        inspectorTheme: "auto",
         trackPerformance: true,
         initialPanel: "collections",
       });
@@ -335,8 +392,6 @@ export default function App(): JSX.Element {
 
     return () => {
       unmount?.();
-      debuggerInstanceRef.current?.dispose();
-      debuggerInstanceRef.current = null;
     };
   }, [db, showDebugger, isMinimized]);
 

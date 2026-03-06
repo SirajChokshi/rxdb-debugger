@@ -42,6 +42,7 @@ const BRIDGE_CHANNEL = "RXDB_DEBUGGER_BRIDGE";
 const BRIDGE_TIMEOUT_MS = 15000;
 const HEARTBEAT_INTERVAL_MS = 5000;
 const COLLECTION_POLL_INTERVAL_MS = 2000;
+const EVAL_TIMEOUT_MS = 2000;
 
 const bridgeEventTypes = new Set<BridgeEventType>([
   "RXDB_CHANGE",
@@ -55,7 +56,12 @@ const bridgeEventTypes = new Set<BridgeEventType>([
  */
 export function evalInPage<T>(expression: string): Promise<T> {
   return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      reject(new Error("Eval timed out"));
+    }, EVAL_TIMEOUT_MS);
+
     chrome.devtools.inspectedWindow.eval(expression, (result, exceptionInfo) => {
+      clearTimeout(timeoutId);
       if (exceptionInfo) {
         reject(new Error(exceptionInfo.value || "Eval failed"));
       } else {
@@ -199,7 +205,7 @@ export function getCollectionChanges(collectionName: string): Observable<ChangeE
  * Initialize the event bridge.
  * Injects scripts into the page and sets up message listeners.
  */
-export async function initBridge(): Promise<void> {
+export async function initBridge(instanceId: string): Promise<void> {
   if (bridgeInitialized) return;
   bridgeInitialized = true;
 
@@ -211,18 +217,12 @@ export async function initBridge(): Promise<void> {
   activeSessionId = sessionId;
 
   try {
-    attachRuntimeMessageListener(sessionId);
-
-    // Inject the content script relay
-    await injectContentScriptRelay(sessionId);
-
     // Inject the page-context bridge
-    await injectPageBridge(sessionId);
+    await injectPageBridge(sessionId, instanceId);
 
     // Start heartbeat to keep page bridge alive
     startHeartbeat(sessionId);
   } catch (error) {
-    removeRuntimeMessageListener();
     activeSessionId = null;
     bridgeInitialized = false;
     throw error;
@@ -304,9 +304,10 @@ async function injectContentScriptRelay(sessionId: string): Promise<void> {
  * Inject the page-context bridge via eval.
  * This subscribes to RxDB events and posts them via postMessage.
  */
-async function injectPageBridge(sessionId: string): Promise<void> {
+async function injectPageBridge(sessionId: string, instanceId: string): Promise<void> {
   const channelLiteral = JSON.stringify(BRIDGE_CHANNEL);
   const sessionLiteral = JSON.stringify(sessionId);
+  const instanceLiteral = JSON.stringify(instanceId);
   const bridgeTimeoutLiteral = String(BRIDGE_TIMEOUT_MS);
   const pollIntervalLiteral = String(COLLECTION_POLL_INTERVAL_MS);
 
@@ -323,11 +324,14 @@ async function injectPageBridge(sessionId: string): Promise<void> {
         state = {
           active: false,
           sessionId: null,
+          instanceId: null,
           channel: null,
           subscriptions: [],
           intervalId: null,
           heartbeat: 0,
-          lastCollections: ''
+          lastCollections: '',
+          lastDatabaseToken: '',
+          eventQueue: []
         };
         root.__rxdb_debugger_bridge_state = state;
       }
@@ -349,29 +353,39 @@ async function injectPageBridge(sessionId: string): Promise<void> {
       }
 
       if (state.active && state.sessionId === sessionId) {
+        if (state.instanceId !== ${instanceLiteral}) {
+          teardown();
+        } else {
         state.heartbeat = Date.now();
         return;
+        }
       }
 
       teardown();
       state.active = true;
       state.sessionId = sessionId;
+      state.instanceId = ${instanceLiteral};
       state.channel = channel;
       state.heartbeat = Date.now();
       state.lastCollections = '';
+      state.lastDatabaseToken = '';
 
       function emit(type, payload) {
-        root.postMessage({
-          channel: channel,
-          sessionId: sessionId,
-          event: {
-            type: type,
-            payload: payload
-          }
-        }, '*');
+        state.eventQueue.push({
+          type: type,
+          payload: payload
+        });
       }
 
-      function subscribeToCollections() {
+      function getActiveDatabase() {
+        var registry = root.__RXDB_DEBUGGER__;
+        if (!registry || typeof registry.getInstanceHandle !== 'function') {
+          return null;
+        }
+        return registry.getInstanceHandle(${instanceLiteral});
+      }
+
+      function subscribeToCollections(db) {
         // Unsubscribe existing
         (state.subscriptions || []).forEach(function(subscription) {
           if (subscription && typeof subscription.unsubscribe === 'function') {
@@ -380,7 +394,6 @@ async function injectPageBridge(sessionId: string): Promise<void> {
         });
         state.subscriptions = [];
 
-        var db = root.__rxdb_handle;
         if (!db || !db.collections) return;
 
         Object.entries(db.collections).forEach(function(entry) {
@@ -406,20 +419,24 @@ async function injectPageBridge(sessionId: string): Promise<void> {
       }
 
       function checkCollections() {
-        var db = root.__rxdb_handle;
+        var db = getActiveDatabase();
         if (!db) {
           if (state.lastCollections !== '') {
             emit('RXDB_DESTROYED', null);
             state.lastCollections = '';
+            state.lastDatabaseToken = '';
           }
           return;
         }
 
+        var currentToken = typeof db.token === 'string' ? db.token : '';
         var current = Object.keys(db.collections || {}).sort().join(',');
-        if (current !== state.lastCollections) {
+        var shouldResubscribe = current !== state.lastCollections || currentToken !== state.lastDatabaseToken;
+        if (shouldResubscribe) {
           state.lastCollections = current;
+          state.lastDatabaseToken = currentToken;
           emit('RXDB_COLLECTIONS_CHANGED', current ? current.split(',') : []);
-          subscribeToCollections();
+          subscribeToCollections(db);
         }
       }
 
@@ -452,12 +469,27 @@ function startHeartbeat(sessionId: string): void {
     evalInPage(`
       (function() {
         var state = window.__rxdb_debugger_bridge_state;
-        if (!state || state.sessionId !== ${sessionLiteral}) return;
+        if (!state || state.sessionId !== ${sessionLiteral}) return [];
         state.heartbeat = Date.now();
+        if (!Array.isArray(state.eventQueue) || state.eventQueue.length === 0) return [];
+        var events = state.eventQueue.slice();
+        state.eventQueue.length = 0;
+        return events;
       })();
-    `).catch(() => {
+    `)
+      .then((events) => {
+        if (!Array.isArray(events)) {
+          return;
+        }
+        for (const event of events) {
+          if (isBridgeEvent(event)) {
+            bridgeSubject?.next(event);
+          }
+        }
+      })
+      .catch(() => {
       // Page may have navigated, ignore
-    });
+      });
   }, HEARTBEAT_INTERVAL_MS);
 }
 
@@ -470,7 +502,6 @@ export async function disposeBridge(): Promise<void> {
     heartbeatInterval = null;
   }
 
-  removeRuntimeMessageListener();
   const sessionId = activeSessionId;
   activeSessionId = null;
 
@@ -503,9 +534,12 @@ export async function disposeBridge(): Promise<void> {
 
       state.active = false;
       state.sessionId = null;
+      state.instanceId = null;
       state.channel = null;
       state.heartbeat = 0;
       state.lastCollections = '';
+      state.lastDatabaseToken = '';
+      state.eventQueue = [];
     })();
   `).catch(() => {
     // Page may have navigated, ignore

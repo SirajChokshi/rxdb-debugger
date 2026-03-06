@@ -413,7 +413,7 @@ export function QueryPanel(props: QueryPanelProps) {
                   <span class="font-mono">{exp().indexFields.join(", ")}</span>
                 </div>
               </Show>
-              <Show when={exp().plannerIndex && exp().plannerIndex.length > 0}>
+              <Show when={(exp().plannerIndex?.length ?? 0) > 0}>
                 <div>
                   <span class="text-text-muted">Planner Index: </span>
                   <span class="font-mono">{exp().plannerIndex?.join(", ")}</span>
