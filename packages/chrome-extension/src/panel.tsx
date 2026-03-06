@@ -523,11 +523,17 @@ function Panel() {
                         </div>
                       </div>
                       <div style="display:flex; gap:6px; flex-wrap:wrap;">
-                        <span style="font-size:11px; color:var(--color-text-secondary); border:1px solid var(--color-border); border-radius:999px; padding:1px 6px;">
-                          {logicalDb.storageName}
+                        <span
+                          title="RxDB storage adapter name"
+                          style="font-size:11px; color:var(--color-text-secondary); border:1px solid var(--color-border); border-radius:999px; padding:1px 6px;"
+                        >
+                          storage: {logicalDb.storageName}
                         </span>
-                        <span style={`font-size:11px; border:1px solid var(--color-border); border-radius:999px; padding:1px 6px; color:${logicalDb.status === "open" ? "var(--color-success)" : "var(--color-text-secondary)"};`}>
-                          {logicalDb.status}
+                        <span
+                          title="Logical database lifecycle status"
+                          style={`font-size:11px; border:1px solid var(--color-border); border-radius:999px; padding:1px 6px; color:${logicalDb.status === "open" ? "var(--color-success)" : "var(--color-text-secondary)"};`}
+                        >
+                          state: {logicalDb.status}
                         </span>
                         <Switch>
                           <Match when={logicalDb.hasEncryptedFields}>
