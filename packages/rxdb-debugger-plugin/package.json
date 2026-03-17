@@ -1,8 +1,8 @@
 {
-  "name": "@rxdb-debugger/core",
+  "name": "rxdb-debugger-plugin",
   "version": "0.1.0",
-  "description": "Headless RxDB debugger with live/snapshot query support",
-  "homepage": "https://github.com/sirajchokshi/rxdb-debugger/tree/main/packages/core#readme",
+  "description": "Auto-discovery plugin for the RxDB Debugger Chrome extension",
+  "homepage": "https://github.com/sirajchokshi/rxdb-debugger#readme",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
@@ -11,30 +11,37 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    },
-    "./plugin": {
-      "types": "./dist/plugin.d.ts",
-      "import": "./dist/plugin.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "sideEffects": false,
   "repository": {
     "type": "git",
     "url": "git+https://github.com/sirajchokshi/rxdb-debugger.git"
   },
+  "keywords": [
+    "rxdb",
+    "debugger",
+    "devtools",
+    "plugin",
+    "chrome-extension",
+    "auto-discovery"
+  ],
   "scripts": {
     "build": "tsdown",
     "dev": "tsdown --watch",
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@rxdb-debugger/core": "workspace:*"
   },
   "peerDependencies": {
     "rxdb": ">=15.0.0",
     "rxjs": ">=7.0.0"
   },
   "devDependencies": {
-    "rxdb": "16.21.1",
-    "rxjs": "7.8.2",
     "tsdown": "^0.20.1",
     "typescript": "^5.7.3"
   },

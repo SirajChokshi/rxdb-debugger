@@ -17,6 +17,7 @@ export default defineConfig({
         { src: "devtools.html", dest: "." },
         { src: "devtools.js", dest: "." },
         { src: "panel.html", dest: "." },
+        { src: "icons/*.png", dest: "icons" },
       ],
     }),
   ],

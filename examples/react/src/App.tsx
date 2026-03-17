@@ -4,7 +4,7 @@ import type {
   ExplorerDatabaseInstance,
   ExplorerDebuggerAdapter,
   ExplorerLogicalDatabase,
-} from "@rxdb-debugger/ui";
+} from "rxdb-debugger/ui";
 import { Menu } from "@base-ui/react/menu";
 import {
   getDatabase,
@@ -393,7 +393,7 @@ export default function App(): JSX.Element {
       },
     };
 
-    import("@rxdb-debugger/ui").then(({ mountExplorerDebugger }) => {
+    import("rxdb-debugger/ui").then(({ mountExplorerDebugger }) => {
       if (!debuggerRef.current) return;
       unmount = mountExplorerDebugger({
         container: debuggerRef.current,

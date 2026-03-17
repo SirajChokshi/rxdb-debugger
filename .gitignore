@@ -8,6 +8,8 @@ build
 .DS_Store
 *.pem
 .idea
+.cursor
+.vscode
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -18,3 +20,6 @@ yarn-error.log*
 .env.test.local
 .env.production.local
 .turbo
+rxdb-debugger-extension.zip
+packages/rxdb-debugger/styles.css
+.vercel

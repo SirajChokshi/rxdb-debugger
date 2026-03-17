@@ -1,11 +1,17 @@
 import { defineConfig } from 'tsdown'
 
 export default defineConfig({
-  entry: ['src/index.ts', 'src/plugin.ts'],
+  entry: ['src/index.ts'],
   outDir: 'dist',
   format: ['esm'],
   dts: true,
-  external: ['rxdb', 'rxdb/plugins/core', 'rxdb/plugins/replication', 'rxjs', 'rxjs/operators', 'dexie'],
+  external: [
+    '@rxdb-debugger/core',
+    '@rxdb-debugger/core/plugin',
+    'rxdb',
+    'rxdb/plugins/core',
+    'rxjs',
+  ],
   platform: 'neutral',
   clean: true,
 })

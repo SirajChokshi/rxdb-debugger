@@ -1,0 +1,71 @@
+{
+  "name": "rxdb-debugger",
+  "version": "0.1.0",
+  "description": "Debug RxDB databases with a headless API, mountable UI, and Chrome DevTools extension",
+  "homepage": "https://github.com/sirajchokshi/rxdb-debugger#readme",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./ui": {
+      "types": "./dist/ui.d.ts",
+      "import": "./dist/ui.js"
+    },
+    "./plugin": {
+      "types": "./dist/plugin.d.ts",
+      "import": "./dist/plugin.js"
+    },
+    "./styles.css": "./styles.css"
+  },
+  "files": [
+    "dist",
+    "styles.css"
+  ],
+  "sideEffects": [
+    "./styles.css"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sirajchokshi/rxdb-debugger.git"
+  },
+  "keywords": [
+    "rxdb",
+    "debugger",
+    "devtools",
+    "database",
+    "inspector",
+    "rxjs",
+    "solidjs"
+  ],
+  "scripts": {
+    "build": "tsdown && cp node_modules/@rxdb-debugger/ui/dist/styles.css styles.css",
+    "dev": "tsdown --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@rxdb-debugger/core": "workspace:*",
+    "@rxdb-debugger/ui": "workspace:*"
+  },
+  "peerDependencies": {
+    "rxdb": ">=15.0.0",
+    "rxjs": ">=7.0.0",
+    "solid-js": "^1.9.0"
+  },
+  "peerDependenciesMeta": {
+    "solid-js": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "tsdown": "^0.20.1",
+    "typescript": "^5.7.3"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

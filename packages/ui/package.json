@@ -39,5 +39,13 @@
   },
   "dependencies": {
     "class-variance-authority": "^0.7.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sirajchokshi/rxdb-debugger.git"
+  },
+  "homepage": "https://github.com/sirajchokshi/rxdb-debugger/tree/main/packages/ui#readme",
+  "publishConfig": {
+    "access": "public"
   }
 }

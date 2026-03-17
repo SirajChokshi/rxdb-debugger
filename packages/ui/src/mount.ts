@@ -86,7 +86,7 @@ export interface MountDebuggerOptions {
  *
  * @example
  * ```typescript
- * import { mountDebugger } from "@lassie/rxdb-explorer/ui";
+ * import { mountDebugger } from "rxdb-debugger/ui";
  *
  * const unmount = mountDebugger({
  *   container: "#debug-panel",

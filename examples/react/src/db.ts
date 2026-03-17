@@ -8,7 +8,7 @@ import {
 import { wrappedKeyEncryptionCryptoJsStorage } from "rxdb/plugins/encryption-crypto-js";
 import { replicateRxCollection } from "rxdb/plugins/replication";
 import { getRxStorageDexie } from "rxdb/plugins/storage-dexie";
-import { installRxdbDebuggerAutoDiscovery } from "@rxdb-debugger/core";
+import { installRxdbDebuggerAutoDiscovery } from "rxdb-debugger-plugin";
 import { Subject } from "rxjs";
 import {
   ARTISTS,
