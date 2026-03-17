@@ -72,7 +72,9 @@ Open [http://localhost:5173](http://localhost:5173) in your browser.
 
 ## Vercel
 
-Use the **repository root** as the project Root Directory (not `examples/react`). The example depends on local packages that use `workspace:*`; installs must run with **Bun** from the monorepo root. Root [vercel.json](../../vercel.json) runs `bun install`, `bun run build:libs`, then builds `examples/react`.
+If the Vercel **Root Directory** is `examples/react`, [vercel.json](./vercel.json) installs from the monorepo root with Bun and builds libs first.
+
+If the root is the **repo**, use the root [vercel.json](../../vercel.json) or run `bun run vercel:monorepo-root` from the repo after `vercel link` (see root README).
 
 The example configures mock replication for `songs` and `users`. Open the debugger and use the **Replication** panel to inspect:
 
