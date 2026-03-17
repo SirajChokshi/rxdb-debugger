@@ -22,3 +22,4 @@ yarn-error.log*
 .turbo
 rxdb-debugger-extension.zip
 packages/rxdb-debugger/styles.css
+.vercel

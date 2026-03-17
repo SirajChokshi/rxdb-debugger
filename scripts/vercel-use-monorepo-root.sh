@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
-# After: vercel login && vercel link --yes --scope <team-or-user> --project rxdb-debugger
-# Clears Vercel "Root Directory" so the repo-root vercel.json drives the build.
+# After: vercel login && vercel link --yes --project rxdb-debugger
+# Syncs Vercel project to monorepo-root build (matches root vercel.json).
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 if [[ ! -f .vercel/project.json ]]; then
-  echo "Missing .vercel/project.json — run from repo root:"
-  echo "  vercel link --yes --project rxdb-debugger --scope siraj"
+  echo "Missing .vercel/project.json — run: vercel link --yes --project rxdb-debugger"
   exit 1
 fi
 
@@ -21,7 +20,15 @@ fi
 
 BODY=$(mktemp)
 trap 'rm -f "$BODY"' EXIT
-printf '%s' '{"rootDirectory":null}' >"$BODY"
+cat >"$BODY" <<'PATCH'
+{
+  "rootDirectory": null,
+  "framework": null,
+  "installCommand": "bun install",
+  "buildCommand": "bun run build:libs && bun run --cwd examples/react build",
+  "outputDirectory": "examples/react/dist"
+}
+PATCH
 
 npx vercel@latest api "/v9/projects/${PROJECT_ID}${QUERY}" -X PATCH --input "$BODY"
-echo "OK: root directory is now the repository root (redeploy or push to refresh preview)."
+echo "OK: Vercel project synced (repo root, bun, build:libs + Vite example)."
