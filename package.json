@@ -1,5 +1,5 @@
 {
-  "name": "rxdb-debugger",
+  "name": "rxdb-debugger-monorepo",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -7,14 +7,20 @@
   "scripts": {
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
-    "build": "bun run lint && bun run --filter '@rxdb-debugger/*' build",
-    "build:libs": "bun run --filter '@rxdb-debugger/core' build && bun run --filter '@rxdb-debugger/ui' build",
+    "build": "bun run lint && bun run --filter '@rxdb-debugger/*' build && bun run --filter 'rxdb-debugger' build && bun run --filter 'rxdb-debugger-plugin' build",
+    "build:libs": "bun run --filter '@rxdb-debugger/core' build && bun run --filter '@rxdb-debugger/ui' build && bun run --filter 'rxdb-debugger' build && bun run --filter 'rxdb-debugger-plugin' build",
     "build:ext": "bun run --filter chrome-extension build",
     "dev": "bun run --filter '@rxdb-debugger/*' dev",
     "typecheck": "bun run --filter '*' typecheck",
-    "clean": "bun run --filter '*' clean || true"
+    "clean": "bun run --filter '*' clean || true",
+    "changeset": "changeset",
+    "version": "changeset version",
+    "release": "bun run build:libs && changeset publish",
+    "pack:ext": "bun run build:ext && cd packages/chrome-extension/dist && zip -r ../../../rxdb-debugger-extension.zip ."
   },
   "devDependencies": {
+    "@changesets/changelog-github": "^0.6.0",
+    "@changesets/cli": "^2.30.0",
     "@types/bun": "^1.3.6",
     "oxlint": "^1.42.0",
     "typescript": "^5.7.3"

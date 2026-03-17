@@ -1,0 +1,19 @@
+{
+  "$schema": "https://unpkg.com/@changesets/config@3.1.1/schema.json",
+  "changelog": [
+    "@changesets/changelog-github",
+    { "repo": "sirajchokshi/rxdb-debugger" }
+  ],
+  "commit": false,
+  "fixed": [
+    ["rxdb-debugger", "rxdb-debugger-plugin", "@rxdb-debugger/core", "@rxdb-debugger/ui"]
+  ],
+  "linked": [],
+  "access": "public",
+  "baseBranch": "main",
+  "updateInternalDependencies": "patch",
+  "ignore": [
+    "chrome-extension",
+    "rxdb-debugger-react-example"
+  ]
+}

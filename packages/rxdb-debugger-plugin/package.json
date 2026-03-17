@@ -1,0 +1,51 @@
+{
+  "name": "rxdb-debugger-plugin",
+  "version": "0.1.0",
+  "description": "Auto-discovery plugin for the RxDB Debugger Chrome extension",
+  "homepage": "https://github.com/sirajchokshi/rxdb-debugger#readme",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sirajchokshi/rxdb-debugger.git"
+  },
+  "keywords": [
+    "rxdb",
+    "debugger",
+    "devtools",
+    "plugin",
+    "chrome-extension",
+    "auto-discovery"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@rxdb-debugger/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "rxdb": ">=15.0.0",
+    "rxjs": ">=7.0.0"
+  },
+  "devDependencies": {
+    "tsdown": "^0.20.1",
+    "typescript": "^5.7.3"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

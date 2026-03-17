@@ -49,10 +49,9 @@ function createExtensionAdapter(): ExplorerDebuggerAdapter {
 const root = document.getElementById("root");
 
 if (root) {
-  const setupSnippet = `import { addRxPlugin } from "rxdb/plugins/core";
-import { createRxdbDebuggerAutoDiscoveryPlugin } from "@rxdb-debugger/core";
+  const setupSnippet = `import { installRxdbDebuggerAutoDiscovery } from "rxdb-debugger-plugin";
 
-addRxPlugin(createRxdbDebuggerAutoDiscoveryPlugin());`;
+installRxdbDebuggerAutoDiscovery();`;
 
   let cleanup: (() => void) | null = null;
   let lastTheme: ThemeMode = getDevToolsTheme();

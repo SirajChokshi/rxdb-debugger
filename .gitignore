@@ -18,3 +18,5 @@ yarn-error.log*
 .env.test.local
 .env.production.local
 .turbo
+rxdb-debugger-extension.zip
+packages/rxdb-debugger/styles.css

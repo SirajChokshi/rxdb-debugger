@@ -1,6 +1,6 @@
 # RxDB Debugger - React Example
 
-A React + Vite app demonstrating [RxDB](https://rxdb.info/) with the `@rxdb-debugger/core` package and debugger UI, featuring a realistic music catalog database.
+A React + Vite app demonstrating [RxDB](https://rxdb.info/) with the `rxdb-debugger` and `rxdb-debugger-plugin` packages, featuring a realistic music catalog database.
 
 ## Features
 
