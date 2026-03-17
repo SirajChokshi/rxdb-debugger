@@ -51,6 +51,10 @@ bun install
 bun run dev
 ```
 
+## Vercel (React example)
+
+In the Vercel project, set **Root Directory** to the repo root. [vercel.json](./vercel.json) uses Bun, builds library packages, then deploys `examples/react/dist`.
+
 ## License
 
 MIT
