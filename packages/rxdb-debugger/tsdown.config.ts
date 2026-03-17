@@ -11,6 +11,7 @@ export default defineConfig({
   dts: true,
   external: [
     '@rxdb-debugger/core',
+    '@rxdb-debugger/core/plugin',
     '@rxdb-debugger/ui',
     'rxdb',
     'rxdb/plugins/core',
