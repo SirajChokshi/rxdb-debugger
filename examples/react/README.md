@@ -70,12 +70,6 @@ bun run dev
 
 Open [http://localhost:5173](http://localhost:5173) in your browser.
 
-## Vercel
-
-If the Vercel **Root Directory** is `examples/react`, [vercel.json](./vercel.json) installs from the monorepo root with Bun and builds libs first.
-
-If the root is the **repo**, use the root [vercel.json](../../vercel.json) or run `bun run vercel:monorepo-root` from the repo after `vercel link` (see root README).
-
 The example configures mock replication for `songs` and `users`. Open the debugger and use the **Replication** panel to inspect:
 
 - Active/paused replication state

@@ -51,18 +51,9 @@ bun install
 bun run dev
 ```
 
-## Vercel (React example)
+## Vercel
 
-**Option A — Root = repo (recommended):** After `vercel login`, from the repo root:
-
-```bash
-bun run vercel:link
-bun run vercel:monorepo-root
-```
-
-That clears the dashboard “Root Directory” so [vercel.json](./vercel.json) runs `bun install`, `build:libs`, and the Vite app.
-
-**Option B — Root = `examples/react`:** [examples/react/vercel.json](./examples/react/vercel.json) runs the same build via `cd ../..` so PR previews still work without changing dashboard settings.
+[vercel.json](./vercel.json) at the repo root: Bun install → build libs → Vite app. In the Vercel project, leave **Root Directory** empty (monorepo root).
 
 ## License
 

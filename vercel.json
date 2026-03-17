@@ -1,6 +1,4 @@
 {
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": null,
   "installCommand": "bun install",
   "buildCommand": "bun run build:libs && bun run --cwd examples/react build",
   "outputDirectory": "examples/react/dist"
