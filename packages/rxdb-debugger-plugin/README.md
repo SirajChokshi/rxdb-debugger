@@ -1,10 +1,41 @@
 # rxdb-debugger-plugin
 
-Auto-discovery for the [RxDB Debugger](https://github.com/SirajChokshi/rxdb-debugger) Chrome extension. Peers: `rxdb`, `rxjs`.
+Minimal auto-discovery plugin for the [RxDB Debugger](https://github.com/SirajChokshi/rxdb-debugger) Chrome extension.
 
-```ts
-import { installRxdbDebuggerAutoDiscovery } from "rxdb-debugger-plugin";
-installRxdbDebuggerAutoDiscovery(); // before createRxDatabase
+Install this in your app so the Chrome DevTools extension can find your RxDB databases automatically. This package has no UI dependencies and adds virtually zero overhead.
+
+## Installation
+
+```bash
+npm install rxdb-debugger-plugin
 ```
+
+**Peer Dependencies:** `rxdb@>=15.0.0`, `rxjs@>=7.0.0`
+
+## Usage
+
+Call once before creating any RxDB databases:
+
+```typescript
+import { installRxdbDebuggerAutoDiscovery } from "rxdb-debugger-plugin";
+
+installRxdbDebuggerAutoDiscovery();
+```
+
+Or use the RxDB plugin API directly:
+
+```typescript
+import { addRxPlugin } from "rxdb/plugins/core";
+import { createRxdbDebuggerAutoDiscoveryPlugin } from "rxdb-debugger-plugin";
+
+addRxPlugin(createRxdbDebuggerAutoDiscoveryPlugin());
+```
+
+## When to Use This vs `rxdb-debugger`
+
+- **`rxdb-debugger-plugin`**: You only want the Chrome extension to work. No headless API or mountable UI.
+- **`rxdb-debugger`**: You want the full headless API, mountable UI, and/or auto-discovery in one package.
+
+## License
 
 MIT
