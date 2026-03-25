@@ -684,26 +684,26 @@ export default function App(): JSX.Element {
 
   if (!db) {
     return (
-      <div className="flex items-center justify-center h-screen bg-black">
+      <div className="flex items-center justify-center h-screen bg-white">
         <div className="text-center">
-          <div className="w-12 h-12 border-4 border-green-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-neutral-400">Loading...</p>
+          <div className="w-12 h-12 border-4 border-pink-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-neutral-500">Loading...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="h-screen flex flex-col bg-black text-white overflow-hidden isolate">
+    <div className="h-screen flex flex-col bg-white text-black overflow-hidden isolate">
       {/* Main Layout */}
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
-        <aside className="w-56 bg-black p-4 flex flex-col gap-6 border-r border-neutral-900">
+        <aside className="w-56 bg-white p-4 flex flex-col gap-6 border-r border-gray-200 shadow-sm">
           <div className="flex items-center gap-2 px-2">
-            <div className="w-8 h-8 bg-linear-to-br from-green-400 to-green-600 rounded-lg flex items-center justify-center">
+            <div className="w-8 h-8 bg-gradient-to-br from-pink-400 to-red-400 rounded-xl flex items-center justify-center shadow">
               <span className="text-lg">♪</span>
             </div>
-            <span className="font-bold text-lg">RxTunes</span>
+            <span className="font-bold text-lg tracking-tight">Music</span>
           </div>
 
           <nav className="flex flex-col gap-1">
@@ -717,10 +717,10 @@ export default function App(): JSX.Element {
 
           <div>
             <div className="flex items-center justify-between px-3 mb-2">
-              <p className="text-neutral-500 text-xs font-semibold uppercase tracking-wider">Library</p>
+              <p className="text-gray-500 text-xs font-semibold uppercase tracking-wider">Library</p>
               <button
                 onClick={() => setCreatePlaylistOpen(true)}
-                className="w-6 h-6 rounded-full bg-neutral-800 text-neutral-300 hover:text-white hover:bg-neutral-700 transition-colors flex items-center justify-center"
+                className="w-6 h-6 rounded-full bg-gray-100 text-gray-500 hover:text-pink-500 hover:bg-gray-200 transition-colors flex items-center justify-center shadow-sm"
                 title="Create playlist"
               >
                 <PlusIcon />
@@ -743,10 +743,10 @@ export default function App(): JSX.Element {
                 <button
                   key={playlist.id}
                   onClick={() => handleOpenPlaylist(playlist.id)}
-                  className={`w-full text-left px-3 py-1.5 rounded text-sm truncate transition-colors ${
+                  className={`w-full text-left px-3 py-1.5 rounded-lg text-sm truncate transition-colors ${
                     selectedPlaylistId === playlist.id && activeView === "playlists"
-                      ? "bg-neutral-800 text-white"
-                      : "text-neutral-400 hover:text-white hover:bg-neutral-900"
+                      ? "bg-pink-50 text-pink-600"
+                      : "text-gray-500 hover:text-pink-500 hover:bg-gray-100"
                   }`}
                 >
                   {playlist.name}
@@ -760,14 +760,14 @@ export default function App(): JSX.Element {
               <button
                 onClick={handleSeed}
                 disabled={isSeeding}
-                className="w-full py-2 bg-green-500 hover:bg-green-400 disabled:opacity-50 text-black font-semibold rounded-full text-sm transition-colors"
+                className="w-full py-2 bg-pink-500 hover:bg-pink-400 disabled:opacity-50 text-white font-semibold rounded-full text-sm transition-colors shadow"
               >
                 {isSeeding ? "Loading..." : "Load Demo Data"}
               </button>
             ) : (
               <button
                 onClick={handleClear}
-                className="w-full py-2 bg-neutral-800 hover:bg-neutral-700 text-white rounded-full text-sm transition-colors"
+                className="w-full py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full text-sm transition-colors shadow"
               >
                 Clear Library
               </button>
@@ -784,7 +784,7 @@ export default function App(): JSX.Element {
           }}
         >
           {/* Main Content */}
-          <main className="flex-1 overflow-y-auto bg-linear-to-b from-neutral-900 to-black">
+          <main className="flex-1 overflow-y-auto bg-gradient-to-b from-white to-gray-50">
             {activeView === "home" && <HomeView artists={artists} albums={albums} songs={songs} onPlaySong={(song) => { void handlePlaySong(song); }} onSelectArtist={(a) => { setSelectedArtist(a); setActiveView("artists"); }} />}
             {activeView === "artists" && !selectedArtist && <ArtistsGrid artists={artists} onSelect={setSelectedArtist} />}
             {activeView === "artists" && selectedArtist && (

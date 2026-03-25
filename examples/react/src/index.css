@@ -9,9 +9,9 @@
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
 
   /* Border radius - shared across themes */
-  --radius: 6px;
-  --radius-sm: 4px;
-  --radius-lg: 8px;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --radius-lg: 16px;
 
   /* Spacing scale - shared across themes */
   --spacing-xs: 4px;
@@ -20,38 +20,38 @@
   --spacing-lg: 16px;
   --spacing-xl: 24px;
 
-  /* Dark theme colors (default) */
-  --color-bg: #0f0f14;
-  --color-bg-secondary: #16161d;
-  --color-bg-hover: #1e1e28;
-  --color-bg-selected: #252533;
-  --color-border: #2a2a3a;
-  --color-text: #e4e4ef;
-  --color-text-secondary: #9898a8;
-  --color-text-muted: #5c5c6c;
-  --color-accent: #8b7cf7;
-  --color-accent-hover: #a090f9;
-  --color-success: #4ade80;
-  --color-warning: #fbbf24;
-  --color-error: #f87171;
+  /* Apple Music-inspired Light theme (default) */
+  --color-bg: #fff;
+  --color-bg-secondary: #f5f5f7;
+  --color-bg-hover: #ececec;
+  --color-bg-selected: #f1e8f9;
+  --color-border: #e5e5ea;
+  --color-text: #1d1d1f;
+  --color-text-secondary: #6e6e73;
+  --color-text-muted: #b1b1b6;
+  --color-accent: #fa2a55;
+  --color-accent-hover: #ff5e62;
+  --color-success: #30d158;
+  --color-warning: #ffd60a;
+  --color-error: #ff375f;
 }
 
 /* Light theme overrides */
 .theme-light,
 .theme-light .rxdb-debugger {
-  --color-bg: #ffffff;
-  --color-bg-secondary: #f6f8fa;
-  --color-bg-hover: #eaeef2;
-  --color-bg-selected: #dbe4ec;
-  --color-border: #d0d7de;
-  --color-text: #1f2328;
-  --color-text-secondary: #57606a;
-  --color-text-muted: #8b949e;
-  --color-accent: #7c5ce7;
-  --color-accent-hover: #6944e0;
-  --color-success: #1a7f37;
-  --color-warning: #bf8700;
-  --color-error: #cf222e;
+  --color-bg: #fff;
+  --color-bg-secondary: #f5f5f7;
+  --color-bg-hover: #ececec;
+  --color-bg-selected: #f1e8f9;
+  --color-border: #e5e5ea;
+  --color-text: #1d1d1f;
+  --color-text-secondary: #6e6e73;
+  --color-text-muted: #b1b1b6;
+  --color-accent: #fa2a55;
+  --color-accent-hover: #ff5e62;
+  --color-success: #30d158;
+  --color-warning: #ffd60a;
+  --color-error: #ff375f;
 }
 
 /* Base styles for standalone debugger use */
