@@ -101,6 +101,9 @@ export {
   type DatabaseInstanceMetadata,
   type DatabaseLifecycleStatus,
   type LogicalDatabaseMetadata,
+  type RegistryChangeType,
+  type RxdbDebuggerRegistryChange,
+  type RxdbDebuggerRegistryListener,
   type RxdbDebuggerGlobalRegistry,
   type RxdbDebuggerRegistrySnapshot,
 } from "./auto-discovery.js";

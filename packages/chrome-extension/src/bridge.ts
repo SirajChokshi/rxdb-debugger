@@ -414,13 +414,11 @@ async function injectPageBridge(sessionId: string, instanceId: string): Promise<
         }
 
         var batch = state.pendingEvents.splice(0, eventBatchSize);
-        batch.forEach(function(event) {
-          root.postMessage({
-            channel: state.channel,
-            sessionId: state.sessionId,
-            event: event
-          }, '*');
-        });
+        root.postMessage({
+          channel: state.channel,
+          sessionId: state.sessionId,
+          event: batch
+        }, '*');
 
         if (state.pendingEvents.length > 0) {
           state.flushTimerId = setTimeout(flushEvents, flushIntervalMs);

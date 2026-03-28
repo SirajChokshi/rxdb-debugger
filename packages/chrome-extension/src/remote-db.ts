@@ -365,7 +365,9 @@ function createRemoteCollection(instanceId: string, info: RemoteCollectionInfo) 
     schema: schemaObj,
   };
 
-  const collectionChanges$ = getCollectionChanges(name);
+  const collectionChanges$ = getCollectionChanges(name).pipe(
+    shareReplay({ bufferSize: 1, refCount: true }),
+  );
 
   const liveCount$ = collectionChanges$.pipe(
     map((event) => (event.operation === "INSERT" ? 1 : event.operation === "DELETE" ? -1 : 0)),
