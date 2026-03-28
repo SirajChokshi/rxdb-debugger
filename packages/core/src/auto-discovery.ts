@@ -49,6 +49,26 @@ export interface RxdbDebuggerRegistrySnapshot {
   instances: Record<string, DatabaseInstanceMetadata>;
 }
 
+export type RegistryChangeType =
+  | "instance-registered"
+  | "instance-status-changed"
+  | "instance-removed"
+  | "collection-added"
+  | "collection-removed";
+
+export interface RxdbDebuggerRegistryChange {
+  type: RegistryChangeType;
+  timestamp: number;
+  logicalDatabaseId: string;
+  instanceId?: string;
+  collectionName?: string;
+  status?: DatabaseLifecycleStatus;
+}
+
+export type RxdbDebuggerRegistryListener = (
+  change: RxdbDebuggerRegistryChange,
+) => void;
+
 export interface RxdbDebuggerGlobalRegistry extends RxdbDebuggerRegistrySnapshot {
   listLogicalDatabases(): LogicalDatabaseMetadata[];
   listInstances(logicalDatabaseId?: string): DatabaseInstanceMetadata[];
@@ -56,6 +76,7 @@ export interface RxdbDebuggerGlobalRegistry extends RxdbDebuggerRegistrySnapshot
   closeInstance(instanceId: string): Promise<boolean>;
   removeInstance(instanceId: string): Promise<boolean>;
   snapshot(): RxdbDebuggerRegistrySnapshot;
+  subscribe(listener: RxdbDebuggerRegistryListener): () => void;
 }
 
 interface RegistryInternals {
@@ -64,6 +85,7 @@ interface RegistryInternals {
   storageTokenByLogicalId: Map<string, string>;
   logicalIdByInstanceId: Map<string, string>;
   instanceIdByDatabase: WeakMap<object, string>;
+  listeners: Set<RxdbDebuggerRegistryListener>;
   nextLogicalId: number;
 }
 
@@ -173,6 +195,7 @@ function createRegistry(): RegistryWithInternals {
     storageTokenByLogicalId: new Map<string, string>(),
     logicalIdByInstanceId: new Map<string, string>(),
     instanceIdByDatabase: new WeakMap<object, string>(),
+    listeners: new Set<RxdbDebuggerRegistryListener>(),
     nextLogicalId: 0,
   };
 
@@ -230,9 +253,38 @@ function createRegistry(): RegistryWithInternals {
         instances,
       };
     },
+    subscribe(listener: RxdbDebuggerRegistryListener) {
+      this.__internals.listeners.add(listener);
+      return () => {
+        this.__internals.listeners.delete(listener);
+      };
+    },
   };
 
   return registry;
+}
+
+function notifyRegistryChange(
+  registry: RegistryWithInternals,
+  change: Omit<RxdbDebuggerRegistryChange, "timestamp">,
+): void {
+  const listeners = Array.from(registry.__internals.listeners);
+  if (listeners.length === 0) {
+    return;
+  }
+
+  const payload: RxdbDebuggerRegistryChange = {
+    ...change,
+    timestamp: Date.now(),
+  };
+
+  for (const listener of listeners) {
+    try {
+      listener(payload);
+    } catch {
+      // Ignore listener errors so registry hooks remain robust.
+    }
+  }
 }
 
 export function getRxdbDebuggerRegistry(
@@ -304,6 +356,7 @@ function setInstanceStatus(
   if (!instance) {
     return;
   }
+  const previousStatus = instance.status;
   instance.status = status;
   instance.updatedAt = now;
 
@@ -329,6 +382,17 @@ function setInstanceStatus(
     logicalDatabase.status = "closed";
   }
   logicalDatabase.updatedAt = now;
+
+  if (previousStatus === status && status !== "removed") {
+    return;
+  }
+
+  notifyRegistryChange(registry, {
+    type: status === "removed" ? "instance-removed" : "instance-status-changed",
+    logicalDatabaseId: logicalDatabase.id,
+    instanceId,
+    status,
+  });
 }
 
 function getStorageIdentityKey(storageName: string, dbName: string): string {
@@ -435,6 +499,12 @@ async function registerDatabase(
 
   registerCollectionsFromDatabase(registry, logicalId, instanceId, database);
   setInstanceStatus(registry, instanceId, "open");
+  notifyRegistryChange(registry, {
+    type: "instance-registered",
+    logicalDatabaseId: logicalId,
+    instanceId,
+    status: "open",
+  });
 
   database.onClose.push(() => {
     setInstanceStatus(registry, instanceId, "closed");
@@ -471,6 +541,13 @@ function registerCollection(
   collectionNameSet.add(collection.name);
   instance.collectionNames = [...collectionNameSet].sort();
   instance.updatedAt = Date.now();
+
+  notifyRegistryChange(registry, {
+    type: "collection-added",
+    logicalDatabaseId: logicalId,
+    instanceId,
+    collectionName: collection.name,
+  });
 }
 
 function markDatabaseClosing(
@@ -537,6 +614,12 @@ function markCollectionRemoved(
       (name) => name !== payload.collectionName
     );
     instance.updatedAt = Date.now();
+    notifyRegistryChange(registry, {
+      type: "collection-removed",
+      logicalDatabaseId: logicalId,
+      instanceId: instance.id,
+      collectionName: payload.collectionName,
+    });
   }
 }
 

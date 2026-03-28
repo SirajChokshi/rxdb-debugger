@@ -83,7 +83,7 @@ describe("bridge communication protocol", () => {
       events.push(event);
     });
 
-    await initBridge();
+    await initBridge("instance-main");
     const sessionId = mockState.getActiveSessionId();
 
     mockState.dispatchRuntimeMessage({
@@ -123,7 +123,7 @@ describe("bridge communication protocol", () => {
   });
 
   test("removes runtime message listeners on dispose", async () => {
-    await initBridge();
+    await initBridge("instance-main");
     expect(mockState.listeners).toHaveLength(1);
 
     await disposeBridge();
@@ -131,9 +131,9 @@ describe("bridge communication protocol", () => {
   });
 
   test("does not duplicate events across reconnect cycles", async () => {
-    await initBridge();
+    await initBridge("instance-main");
     await disposeBridge();
-    await initBridge();
+    await initBridge("instance-main");
 
     const sessionId = mockState.getActiveSessionId();
     const events: BridgeEvent[] = [];
@@ -152,6 +152,37 @@ describe("bridge communication protocol", () => {
 
     expect(events).toHaveLength(1);
     expect(events[0]?.type).toBe("RXDB_COLLECTIONS_CHANGED");
+
+    subscription.unsubscribe();
+  });
+
+  test("supports batched runtime bridge payloads", async () => {
+    const events: BridgeEvent[] = [];
+    const subscription = getBridgeEvents().subscribe((event) => {
+      events.push(event);
+    });
+
+    await initBridge("instance-main");
+    const sessionId = mockState.getActiveSessionId();
+
+    mockState.dispatchRuntimeMessage({
+      channel: "RXDB_DEBUGGER_BRIDGE",
+      sessionId,
+      event: [
+        {
+          type: "RXDB_COLLECTIONS_CHANGED",
+          payload: ["heroes"],
+        },
+        {
+          type: "RXDB_DESTROYED",
+          payload: null,
+        },
+      ],
+    });
+
+    expect(events).toHaveLength(2);
+    expect(events[0]?.type).toBe("RXDB_COLLECTIONS_CHANGED");
+    expect(events[1]?.type).toBe("RXDB_DESTROYED");
 
     subscription.unsubscribe();
   });
