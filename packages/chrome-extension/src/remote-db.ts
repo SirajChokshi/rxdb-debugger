@@ -1,4 +1,4 @@
-import { Observable, startWith, scan, map, filter } from "rxjs";
+import { Observable, of, startWith, scan, map, filter } from "rxjs";
 import { shareReplay } from "rxjs/operators";
 import { 
   evalInPage, 
@@ -171,6 +171,8 @@ function createLiveFetchObservable<T>(
       }, LIVE_REFETCH_COALESCE_MS);
     };
 
+    void runFetch();
+
     const invalidationSubscription = invalidation$.subscribe({
       next: scheduleRefetch,
       error: (error) => {
@@ -179,8 +181,6 @@ function createLiveFetchObservable<T>(
         }
       },
     });
-
-    void runFetch();
 
     return () => {
       disposed = true;
@@ -490,7 +490,7 @@ function createRemoteFindOne(
     exec: fetchDoc,
     get $(): Observable<unknown | null> {
       if (!primary) {
-        return createLiveFetchObservable(fetchDoc, createCollectionInvalidation$(collectionName));
+        return of(null).pipe(shareReplay(1));
       }
       return createLiveFetchObservable(
         fetchDoc,
