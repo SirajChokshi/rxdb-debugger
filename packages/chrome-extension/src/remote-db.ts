@@ -1,10 +1,12 @@
-import { Observable, from, startWith, scan, map } from "rxjs";
+import { Observable, startWith, scan, map, filter } from "rxjs";
 import { shareReplay } from "rxjs/operators";
 import { 
   evalInPage, 
   evalAsyncInPage, 
   getCollectionChanges, 
   getBridgeEvents,
+  type BridgeEvent,
+  type ChangeEventPayload,
 } from "./bridge.js";
 
 interface RemoteCollectionSchema {
@@ -61,6 +63,8 @@ interface RegistrySnapshot {
   instances: Record<string, RemoteDatabaseInstanceInfo>;
 }
 
+const LIVE_REFETCH_COALESCE_MS = 30;
+
 /**
  * Wraps a plain JSON document to look like an RxDocument.
  * The core library calls doc.toJSON() and accesses doc.collection.schema.primaryPath
@@ -84,6 +88,108 @@ function wrapDocument(data: Record<string, unknown>, collectionRef: { schema: { 
     // Primary key value
     primary: primaryValue,
   };
+}
+
+function isCollectionChangeEvent(
+  event: BridgeEvent,
+  collectionName: string,
+): event is BridgeEvent & { payload: ChangeEventPayload } {
+  return event.type === "RXDB_CHANGE"
+    && (event.payload as ChangeEventPayload | undefined)?.collection === collectionName;
+}
+
+function createCollectionInvalidation$(collectionName: string): Observable<BridgeEvent> {
+  return getBridgeEvents().pipe(
+    filter((event) =>
+      isCollectionChangeEvent(event, collectionName)
+      || event.type === "RXDB_COLLECTIONS_CHANGED"
+      || event.type === "RXDB_DESTROYED"
+    )
+  );
+}
+
+function createDocumentInvalidation$(
+  collectionName: string,
+  documentId: string,
+): Observable<BridgeEvent> {
+  return getBridgeEvents().pipe(
+    filter((event) => {
+      if (event.type === "RXDB_COLLECTIONS_CHANGED" || event.type === "RXDB_DESTROYED") {
+        return true;
+      }
+      if (!isCollectionChangeEvent(event, collectionName)) {
+        return false;
+      }
+      return event.payload.documentId === documentId;
+    }),
+  );
+}
+
+function createLiveFetchObservable<T>(
+  fetcher: () => Promise<T>,
+  invalidation$: Observable<unknown>,
+): Observable<T> {
+  return new Observable<T>((subscriber) => {
+    let disposed = false;
+    let inFlight = false;
+    let shouldRefetchAfterCurrent = false;
+    let refetchTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const runFetch = async (): Promise<void> => {
+      if (disposed || inFlight) {
+        shouldRefetchAfterCurrent = true;
+        return;
+      }
+
+      inFlight = true;
+      try {
+        const result = await fetcher();
+        if (disposed) {
+          return;
+        }
+        subscriber.next(result);
+      } catch (error) {
+        if (!disposed) {
+          subscriber.error(error);
+        }
+      } finally {
+        inFlight = false;
+        if (!disposed && shouldRefetchAfterCurrent) {
+          shouldRefetchAfterCurrent = false;
+          void runFetch();
+        }
+      }
+    };
+
+    const scheduleRefetch = (): void => {
+      if (disposed || refetchTimer) {
+        return;
+      }
+      refetchTimer = setTimeout(() => {
+        refetchTimer = null;
+        void runFetch();
+      }, LIVE_REFETCH_COALESCE_MS);
+    };
+
+    const invalidationSubscription = invalidation$.subscribe({
+      next: scheduleRefetch,
+      error: (error) => {
+        if (!disposed) {
+          subscriber.error(error);
+        }
+      },
+    });
+
+    void runFetch();
+
+    return () => {
+      disposed = true;
+      invalidationSubscription.unsubscribe();
+      if (refetchTimer) {
+        clearTimeout(refetchTimer);
+      }
+    };
+  }).pipe(shareReplay({ bufferSize: 1, refCount: true }));
 }
 
 async function getRegistrySnapshot(): Promise<RegistrySnapshot | null> {
@@ -259,7 +365,9 @@ function createRemoteCollection(instanceId: string, info: RemoteCollectionInfo) 
     schema: schemaObj,
   };
 
-  const collectionChanges$ = getCollectionChanges(name);
+  const collectionChanges$ = getCollectionChanges(name).pipe(
+    shareReplay({ bufferSize: 1, refCount: true }),
+  );
 
   const liveCount$ = collectionChanges$.pipe(
     map((event) => (event.operation === "INSERT" ? 1 : event.operation === "DELETE" ? -1 : 0)),
@@ -345,7 +453,7 @@ function createRemoteQuery(
     },
     exec: fetchDocs,
     get $(): Observable<unknown[]> {
-      return from(fetchDocs()).pipe(shareReplay(1));
+      return createLiveFetchObservable(fetchDocs, createCollectionInvalidation$(collectionName));
     },
   };
 
@@ -381,7 +489,13 @@ function createRemoteFindOne(
   return {
     exec: fetchDoc,
     get $(): Observable<unknown | null> {
-      return from(fetchDoc()).pipe(shareReplay(1));
+      if (!primary) {
+        return createLiveFetchObservable(fetchDoc, createCollectionInvalidation$(collectionName));
+      }
+      return createLiveFetchObservable(
+        fetchDoc,
+        createDocumentInvalidation$(collectionName, primary),
+      );
     },
   };
 }

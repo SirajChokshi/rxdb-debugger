@@ -35,7 +35,7 @@ type RuntimeMessageListener = Parameters<typeof chrome.runtime.onMessage.addList
 interface RuntimeBridgeEnvelope {
   channel: string;
   sessionId: string;
-  event: BridgeEvent;
+  event: unknown;
 }
 
 const BRIDGE_CHANNEL = "RXDB_DEBUGGER_BRIDGE";
@@ -43,6 +43,9 @@ const BRIDGE_TIMEOUT_MS = 15000;
 const HEARTBEAT_INTERVAL_MS = 5000;
 const COLLECTION_POLL_INTERVAL_MS = 2000;
 const EVAL_TIMEOUT_MS = 2000;
+const EVENT_FLUSH_INTERVAL_MS = 16;
+const MAX_PENDING_EVENTS = 2000;
+const EVENT_BATCH_SIZE = 250;
 
 const bridgeEventTypes = new Set<BridgeEventType>([
   "RXDB_CHANGE",
@@ -131,7 +134,7 @@ function isBridgeEvent(event: unknown): event is BridgeEvent {
   );
 }
 
-function parseRuntimeBridgeMessage(message: unknown, sessionId: string): BridgeEvent | null {
+function parseRuntimeBridgeMessage(message: unknown, sessionId: string): BridgeEvent[] | null {
   if (typeof message !== "object" || message === null) {
     return null;
   }
@@ -143,10 +146,18 @@ function parseRuntimeBridgeMessage(message: unknown, sessionId: string): BridgeE
   if (envelope.sessionId !== sessionId) {
     return null;
   }
-  if (!isBridgeEvent(envelope.event)) {
-    return null;
+
+  const { event } = envelope;
+  if (isBridgeEvent(event)) {
+    return [event];
   }
-  return envelope.event;
+  if (Array.isArray(event)) {
+    const events = event.filter((candidate): candidate is BridgeEvent => isBridgeEvent(candidate));
+    if (events.length > 0) {
+      return events;
+    }
+  }
+  return null;
 }
 
 function removeRuntimeMessageListener(): void {
@@ -166,12 +177,14 @@ function attachRuntimeMessageListener(sessionId: string): void {
       return;
     }
 
-    const event = parseRuntimeBridgeMessage(message, sessionId);
-    if (!event) {
+    const events = parseRuntimeBridgeMessage(message, sessionId);
+    if (!events) {
       return;
     }
 
-    bridgeSubject?.next(event);
+    for (const event of events) {
+      bridgeSubject?.next(event);
+    }
   };
 
   chrome.runtime.onMessage.addListener(runtimeMessageListener);
@@ -217,12 +230,16 @@ export async function initBridge(instanceId: string): Promise<void> {
   activeSessionId = sessionId;
 
   try {
+    await injectContentScriptRelay(sessionId);
+    attachRuntimeMessageListener(sessionId);
+
     // Inject the page-context bridge
     await injectPageBridge(sessionId, instanceId);
 
     // Start heartbeat to keep page bridge alive
     startHeartbeat(sessionId);
   } catch (error) {
+    removeRuntimeMessageListener();
     activeSessionId = null;
     bridgeInitialized = false;
     throw error;
@@ -235,69 +252,64 @@ export async function initBridge(instanceId: string): Promise<void> {
  */
 async function injectContentScriptRelay(sessionId: string): Promise<void> {
   const tabId = chrome.devtools.inspectedWindow.tabId;
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    args: [BRIDGE_CHANNEL, sessionId],
+    func: (channel: string, currentSessionId: string) => {
+      interface RelayMessage {
+        channel?: unknown;
+        sessionId?: unknown;
+        event?: unknown;
+      }
 
-  try {
-    await chrome.scripting.executeScript({
-      target: { tabId },
-      args: [BRIDGE_CHANNEL, sessionId],
-      func: (channel: string, currentSessionId: string) => {
-        interface RelayMessage {
-          channel?: unknown;
-          sessionId?: unknown;
-          event?: unknown;
-        }
+      interface RelayState {
+        channel: string;
+        sessionId: string;
+        listener: (event: MessageEvent) => void;
+      }
 
-        interface RelayState {
-          channel: string;
-          sessionId: string;
-          listener: (event: MessageEvent) => void;
-        }
+      const relayWindow = window as typeof window & {
+        __rxdb_debugger_relay_state?: RelayState;
+      };
 
-        const relayWindow = window as typeof window & {
-          __rxdb_debugger_relay_state?: RelayState;
-        };
+      const existingRelay = relayWindow.__rxdb_debugger_relay_state;
+      if (existingRelay) {
+        existingRelay.channel = channel;
+        existingRelay.sessionId = currentSessionId;
+        return;
+      }
 
-        const existingRelay = relayWindow.__rxdb_debugger_relay_state;
-        if (existingRelay) {
-          existingRelay.channel = channel;
-          existingRelay.sessionId = currentSessionId;
-          return;
-        }
-
-        const relayState: RelayState = {
-          channel,
-          sessionId: currentSessionId,
-          listener: (event: MessageEvent) => {
-            if (event.source !== window) {
-              return;
-            }
-            if (typeof event.data !== "object" || event.data === null) {
-              return;
-            }
-
-            const message = event.data as RelayMessage;
-            if (message.channel !== relayState.channel) {
-              return;
-            }
-            if (message.sessionId !== relayState.sessionId) {
-              return;
-            }
-
-            chrome.runtime.sendMessage({
-              channel: relayState.channel,
-              sessionId: relayState.sessionId,
-              event: message.event,
-            });
+      const relayState: RelayState = {
+        channel,
+        sessionId: currentSessionId,
+        listener: (event: MessageEvent) => {
+          if (event.source !== window) {
+            return;
           }
-        };
+          if (typeof event.data !== "object" || event.data === null) {
+            return;
+          }
 
-        relayWindow.__rxdb_debugger_relay_state = relayState;
-        window.addEventListener("message", relayState.listener);
-      },
-    });
-  } catch (err) {
-    console.warn("Failed to inject content script relay:", err);
-  }
+          const message = event.data as RelayMessage;
+          if (message.channel !== relayState.channel) {
+            return;
+          }
+          if (message.sessionId !== relayState.sessionId) {
+            return;
+          }
+
+          chrome.runtime.sendMessage({
+            channel: relayState.channel,
+            sessionId: relayState.sessionId,
+            event: message.event,
+          });
+        }
+      };
+
+      relayWindow.__rxdb_debugger_relay_state = relayState;
+      window.addEventListener("message", relayState.listener);
+    },
+  });
 }
 
 /**
@@ -310,6 +322,9 @@ async function injectPageBridge(sessionId: string, instanceId: string): Promise<
   const instanceLiteral = JSON.stringify(instanceId);
   const bridgeTimeoutLiteral = String(BRIDGE_TIMEOUT_MS);
   const pollIntervalLiteral = String(COLLECTION_POLL_INTERVAL_MS);
+  const flushIntervalLiteral = String(EVENT_FLUSH_INTERVAL_MS);
+  const maxPendingEventsLiteral = String(MAX_PENDING_EVENTS);
+  const eventBatchSizeLiteral = String(EVENT_BATCH_SIZE);
 
   await evalInPage(`
     (function() {
@@ -317,6 +332,9 @@ async function injectPageBridge(sessionId: string, instanceId: string): Promise<
       var sessionId = ${sessionLiteral};
       var bridgeTimeoutMs = ${bridgeTimeoutLiteral};
       var pollIntervalMs = ${pollIntervalLiteral};
+      var flushIntervalMs = ${flushIntervalLiteral};
+      var maxPendingEvents = ${maxPendingEventsLiteral};
+      var eventBatchSize = ${eventBatchSizeLiteral};
       var root = window;
 
       var state = root.__rxdb_debugger_bridge_state;
@@ -328,10 +346,13 @@ async function injectPageBridge(sessionId: string, instanceId: string): Promise<
           channel: null,
           subscriptions: [],
           intervalId: null,
+          flushTimerId: null,
+          registryUnsubscribe: null,
+          shouldPollCollections: false,
           heartbeat: 0,
           lastCollections: '',
           lastDatabaseToken: '',
-          eventQueue: []
+          pendingEvents: []
         };
         root.__rxdb_debugger_bridge_state = state;
       }
@@ -349,6 +370,17 @@ async function injectPageBridge(sessionId: string, instanceId: string): Promise<
           state.intervalId = null;
         }
 
+        if (state.flushTimerId) {
+          clearTimeout(state.flushTimerId);
+          state.flushTimerId = null;
+        }
+
+        if (typeof state.registryUnsubscribe === 'function') {
+          state.registryUnsubscribe();
+        }
+        state.registryUnsubscribe = null;
+        state.shouldPollCollections = false;
+        state.pendingEvents = [];
         state.active = false;
       }
 
@@ -369,12 +401,52 @@ async function injectPageBridge(sessionId: string, instanceId: string): Promise<
       state.heartbeat = Date.now();
       state.lastCollections = '';
       state.lastDatabaseToken = '';
+      state.pendingEvents = [];
+      state.flushTimerId = null;
+      state.registryUnsubscribe = null;
+      state.shouldPollCollections = false;
+
+      function flushEvents() {
+        state.flushTimerId = null;
+
+        if (!state.active || !Array.isArray(state.pendingEvents) || state.pendingEvents.length === 0) {
+          return;
+        }
+
+        var batch = state.pendingEvents.splice(0, eventBatchSize);
+        root.postMessage({
+          channel: state.channel,
+          sessionId: state.sessionId,
+          event: batch
+        }, '*');
+
+        if (state.pendingEvents.length > 0) {
+          state.flushTimerId = setTimeout(flushEvents, flushIntervalMs);
+        }
+      }
+
+      function scheduleFlush() {
+        if (state.flushTimerId) {
+          return;
+        }
+        state.flushTimerId = setTimeout(flushEvents, flushIntervalMs);
+      }
 
       function emit(type, payload) {
-        state.eventQueue.push({
+        if (!Array.isArray(state.pendingEvents)) {
+          state.pendingEvents = [];
+        }
+        if (state.pendingEvents.length >= maxPendingEvents) {
+          var overflow = state.pendingEvents.length - maxPendingEvents + 1;
+          if (overflow > 0) {
+            state.pendingEvents.splice(0, overflow);
+          }
+        }
+        state.pendingEvents.push({
           type: type,
           payload: payload
         });
+        scheduleFlush();
       }
 
       function getActiveDatabase() {
@@ -426,6 +498,9 @@ async function injectPageBridge(sessionId: string, instanceId: string): Promise<
             state.lastCollections = '';
             state.lastDatabaseToken = '';
           }
+          if (state.subscriptions.length > 0) {
+            subscribeToCollections(null);
+          }
           return;
         }
 
@@ -440,6 +515,34 @@ async function injectPageBridge(sessionId: string, instanceId: string): Promise<
         }
       }
 
+      function setupRegistrySubscription() {
+        var registry = root.__RXDB_DEBUGGER__;
+        if (!registry || typeof registry.subscribe !== 'function') {
+          return false;
+        }
+
+        try {
+          var unsubscribe = registry.subscribe(function(change) {
+            if (!state.active || state.sessionId !== sessionId) {
+              return;
+            }
+            if (!change || typeof change !== 'object') {
+              return;
+            }
+            checkCollections();
+          });
+
+          if (typeof unsubscribe === 'function') {
+            state.registryUnsubscribe = unsubscribe;
+            return true;
+          }
+        } catch (_error) {
+          return false;
+        }
+
+        return false;
+      }
+
       function checkHeartbeat() {
         if (Date.now() - state.heartbeat > bridgeTimeoutMs) {
           // Panel disconnected, cleanup
@@ -448,10 +551,13 @@ async function injectPageBridge(sessionId: string, instanceId: string): Promise<
       }
 
       checkCollections();
+      state.shouldPollCollections = !setupRegistrySubscription();
 
       // Check for collection changes and heartbeat periodically
       state.intervalId = setInterval(function() {
-        checkCollections();
+        if (state.shouldPollCollections) {
+          checkCollections();
+        }
         checkHeartbeat();
       }, pollIntervalMs);
     })();
@@ -469,24 +575,10 @@ function startHeartbeat(sessionId: string): void {
     evalInPage(`
       (function() {
         var state = window.__rxdb_debugger_bridge_state;
-        if (!state || state.sessionId !== ${sessionLiteral}) return [];
+        if (!state || state.sessionId !== ${sessionLiteral}) return;
         state.heartbeat = Date.now();
-        if (!Array.isArray(state.eventQueue) || state.eventQueue.length === 0) return [];
-        var events = state.eventQueue.slice();
-        state.eventQueue.length = 0;
-        return events;
       })();
     `)
-      .then((events) => {
-        if (!Array.isArray(events)) {
-          return;
-        }
-        for (const event of events) {
-          if (isBridgeEvent(event)) {
-            bridgeSubject?.next(event);
-          }
-        }
-      })
       .catch(() => {
       // Page may have navigated, ignore
       });
@@ -504,6 +596,8 @@ export async function disposeBridge(): Promise<void> {
 
   const sessionId = activeSessionId;
   activeSessionId = null;
+
+  removeRuntimeMessageListener();
 
   bridgeSubject?.complete();
   bridgeSubject = null;
@@ -532,6 +626,15 @@ export async function disposeBridge(): Promise<void> {
         state.intervalId = null;
       }
 
+      if (state.flushTimerId) {
+        clearTimeout(state.flushTimerId);
+        state.flushTimerId = null;
+      }
+
+      if (typeof state.registryUnsubscribe === 'function') {
+        state.registryUnsubscribe();
+      }
+
       state.active = false;
       state.sessionId = null;
       state.instanceId = null;
@@ -539,7 +642,9 @@ export async function disposeBridge(): Promise<void> {
       state.heartbeat = 0;
       state.lastCollections = '';
       state.lastDatabaseToken = '';
-      state.eventQueue = [];
+      state.pendingEvents = [];
+      state.registryUnsubscribe = null;
+      state.shouldPollCollections = false;
     })();
   `).catch(() => {
     // Page may have navigated, ignore
