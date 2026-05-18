@@ -119,10 +119,10 @@ interface MockRemoteUsersStore {
 }
 
 const REMOTE_SONGS_STORAGE_KEY = "rxdb-debugger-mock-remote-songs-v1";
-export const SONGS_REPLICATION_IDENTIFIER = "mock-songs-sync";
+const SONGS_REPLICATION_IDENTIFIER = "mock-songs-sync";
 const REMOTE_SONG_UPDATE_INTERVAL_MS = 8000;
 const REMOTE_USERS_STORAGE_KEY = "rxdb-debugger-mock-remote-users-v2";
-export const USERS_REPLICATION_IDENTIFIER = "mock-users-sync";
+const USERS_REPLICATION_IDENTIFIER = "mock-users-sync";
 const USERS_UPDATE_INTERVAL_MS = 30000;
 const REPLICATION_OFFLINE_STORAGE_KEY = "rxtunes-replication-offline";
 
@@ -170,10 +170,10 @@ function stopRemoteSyncIntervals(): void {
 }
 
 function startRemoteSyncIntervals(): void {
-  if (!mockReplicationOffline && songsReplicationStarted && !songsSyncInterval) {
+  if (songsReplicationStarted && !songsSyncInterval) {
     songsSyncInterval = setInterval(runRemoteSongMutationTick, REMOTE_SONG_UPDATE_INTERVAL_MS);
   }
-  if (!mockReplicationOffline && usersReplicationStarted && !usersSyncInterval) {
+  if (usersReplicationStarted && !usersSyncInterval) {
     usersSyncInterval = setInterval(runRemoteUserMutationTick, USERS_UPDATE_INTERVAL_MS);
   }
 }
@@ -188,13 +188,13 @@ export function isMockReplicationOffline(): boolean {
   return mockReplicationOffline;
 }
 
-async function applyMockReplicationOfflineState(): Promise<void> {
+async function applyMockReplicationOfflineState(offline = mockReplicationOffline): Promise<void> {
   const states = getActiveReplicationStates();
   if (states.length === 0) {
     return;
   }
 
-  if (mockReplicationOffline) {
+  if (offline) {
     stopRemoteSyncIntervals();
     await Promise.all(states.map((state) => state.pause()));
     return;
@@ -212,9 +212,16 @@ export async function setMockReplicationOffline(offline: boolean): Promise<void>
     return;
   }
 
+  const previousOffline = mockReplicationOffline;
+  try {
+    await applyMockReplicationOfflineState(offline);
+  } catch (error) {
+    await applyMockReplicationOfflineState(previousOffline).catch(() => undefined);
+    throw error;
+  }
+
   mockReplicationOffline = offline;
   persistReplicationOffline(offline);
-  await applyMockReplicationOfflineState();
 }
 
 function compareSongsByCheckpoint(a: SongsCheckpoint, b: SongsCheckpoint): number {

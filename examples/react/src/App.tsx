@@ -1247,11 +1247,11 @@ function FriendsSidebar({
 }) {
   return (
     <aside
-      className={`border-l border-neutral-900 bg-neutral-950/90 backdrop-blur-sm transition-[width] duration-200 ease-out shrink-0 ${
+      className={`flex flex-col min-h-0 border-l border-neutral-900 bg-neutral-950/90 backdrop-blur-sm transition-[width] duration-200 ease-out shrink-0 ${
         isCollapsed ? "w-11" : "w-72"
       }`}
     >
-      <div className="flex items-center justify-between border-b border-neutral-900 px-3 py-3">
+      <div className="flex items-center justify-between shrink-0 border-b border-neutral-900 px-3 py-3">
         <button
           onClick={onToggle}
           className="w-6 h-6 rounded-full bg-neutral-800 text-neutral-200 hover:bg-neutral-700 transition-colors flex items-center justify-center shrink-0"
@@ -1267,7 +1267,7 @@ function FriendsSidebar({
       </div>
 
       {!isCollapsed && isReplicationOffline && (
-        <div className="mx-3 mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
+        <div className="mx-3 mt-3 shrink-0 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
           Sync is offline. Friend activity will resume when you go back online.
         </div>
       )}
@@ -1286,7 +1286,7 @@ function FriendsSidebar({
           ))}
         </div>
       ) : (
-        <div className="overflow-y-auto h-[calc(100%-53px)] p-3">
+        <div className="min-h-0 flex-1 overflow-y-auto p-3">
           {friendActivities.length === 0 ? (
             <div className="rounded-lg border border-dashed border-neutral-700 p-4 text-xs text-neutral-400">
               Friend graph data is syncing…
