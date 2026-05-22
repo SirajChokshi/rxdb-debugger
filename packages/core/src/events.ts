@@ -141,6 +141,8 @@ function toChangeEvent(
   };
 }
 
+const COLLECTION_SYNC_INTERVAL_MS = 2000;
+
 /**
  * Create the events service for a database.
  */
@@ -154,29 +156,50 @@ export function createEventsService(
   const eventSubject = new Subject<ChangeEvent>();
 
   let initialized = false;
+  let collectionSyncInterval: ReturnType<typeof setInterval> | null = null;
+  const subscribedCollections = new Set<string>();
   let subscriptions: { unsubscribe: () => void }[] = [];
+
+  const recordEvent = (event: ChangeEvent): void => {
+    eventBuffer.push(event);
+    while (eventBuffer.length > bufferSize) {
+      eventBuffer.shift();
+    }
+    eventSubject.next(event);
+  };
+
+  const subscribeToCollection = (name: string, collection: RxCollection): void => {
+    if (subscribedCollections.has(name)) {
+      return;
+    }
+    subscribedCollections.add(name);
+
+    const sub = collection.$.pipe(
+      takeUntil(destroy$),
+      filter(() => !paused$.value),
+      map((event) => toChangeEvent(event, name)),
+    ).subscribe((event) => {
+      recordEvent(event);
+    });
+    subscriptions.push(sub);
+  };
+
+  const syncCollections = async (): Promise<void> => {
+    const db = await getDb();
+    for (const [name, collection] of Object.entries(db.collections)) {
+      subscribeToCollection(name, collection as RxCollection);
+    }
+  };
 
   const initialize = async (): Promise<void> => {
     if (initialized) return;
     initialized = true;
 
-    const db = await getDb();
+    await syncCollections();
 
-    for (const [name, collection] of Object.entries(db.collections)) {
-      const col = collection as RxCollection;
-      const sub = col.$.pipe(
-        takeUntil(destroy$),
-        filter(() => !paused$.value),
-        map((event) => toChangeEvent(event, name)),
-      ).subscribe((event) => {
-        eventBuffer.push(event);
-        while (eventBuffer.length > bufferSize) {
-          eventBuffer.shift();
-        }
-        eventSubject.next(event);
-      });
-      subscriptions.push(sub);
-    }
+    collectionSyncInterval = setInterval(() => {
+      void syncCollections();
+    }, COLLECTION_SYNC_INTERVAL_MS);
   };
 
   return {
@@ -273,6 +296,10 @@ export function createEventsService(
     },
 
     dispose(): void {
+      if (collectionSyncInterval) {
+        clearInterval(collectionSyncInterval);
+        collectionSyncInterval = null;
+      }
       destroy$.next();
       destroy$.complete();
       paused$.complete();
@@ -281,6 +308,7 @@ export function createEventsService(
         sub.unsubscribe();
       }
       subscriptions = [];
+      subscribedCollections.clear();
       initialized = false;
     },
   };

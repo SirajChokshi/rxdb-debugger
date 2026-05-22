@@ -1,5 +1,5 @@
-import { Observable, from, startWith, scan, map } from "rxjs";
-import { shareReplay } from "rxjs/operators";
+import { Observable, from, merge, startWith, scan, map } from "rxjs";
+import { shareReplay, switchMap } from "rxjs/operators";
 import { 
   evalInPage, 
   evalAsyncInPage, 
@@ -273,11 +273,11 @@ function createRemoteCollection(instanceId: string, info: RemoteCollectionInfo) 
     schema: schemaObj,
 
     find(_queryObj?: Record<string, unknown>) {
-      return createRemoteQuery(instanceId, name, collectionRef);
+      return createRemoteQuery(instanceId, name, collectionRef, collectionChanges$);
     },
 
     findOne(primary?: string) {
-      return createRemoteFindOne(instanceId, name, collectionRef, primary);
+      return createRemoteFindOne(instanceId, name, collectionRef, primary, collectionChanges$);
     },
 
     count() {
@@ -305,6 +305,7 @@ function createRemoteQuery(
   instanceId: string,
   collectionName: string,
   collectionRef: { schema: { primaryPath: string } },
+  collectionChanges$: ReturnType<typeof getCollectionChanges>,
 ) {
   let limitValue: number | undefined;
   let skipValue: number | undefined;
@@ -345,7 +346,9 @@ function createRemoteQuery(
     },
     exec: fetchDocs,
     get $(): Observable<unknown[]> {
-      return from(fetchDocs()).pipe(shareReplay(1));
+      const initial$ = from(fetchDocs());
+      const updates$ = collectionChanges$.pipe(switchMap(() => from(fetchDocs())));
+      return merge(initial$, updates$).pipe(shareReplay(1));
     },
   };
 
@@ -356,7 +359,8 @@ function createRemoteFindOne(
   instanceId: string,
   collectionName: string, 
   collectionRef: { schema: { primaryPath: string } },
-  primary?: string
+  primary: string | undefined,
+  collectionChanges$: ReturnType<typeof getCollectionChanges>,
 ) {
   const instanceIdLiteral = JSON.stringify(instanceId);
   const collectionNameLiteral = JSON.stringify(collectionName);
@@ -381,7 +385,9 @@ function createRemoteFindOne(
   return {
     exec: fetchDoc,
     get $(): Observable<unknown | null> {
-      return from(fetchDoc()).pipe(shareReplay(1));
+      const initial$ = from(fetchDoc());
+      const updates$ = collectionChanges$.pipe(switchMap(() => from(fetchDoc())));
+      return merge(initial$, updates$).pipe(shareReplay(1));
     },
   };
 }

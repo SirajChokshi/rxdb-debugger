@@ -1,10 +1,9 @@
-import { createEffect, createSignal, For, Show } from "solid-js";
+import { createEffect, createSignal, For, onCleanup, Show } from "solid-js";
 import type { RxdbDebugger, ChangeEvent, OperationType } from "@rxdb-debugger/core";
 import type { Theme } from "../../styles/theme.js";
 import { Button } from "../shared/Button.js";
 import { JsonDiff } from "../shared/JsonDiff.js";
 import { JsonViewer } from "../shared/JsonViewer.js";
-import { fromObservable } from "../../utils/observable.js";
 
 const OPERATION_TYPES: OperationType[] = ["INSERT", "UPDATE", "DELETE"];
 
@@ -28,14 +27,15 @@ export function EventsPanel(props: EventsPanelProps) {
   const [collectionFilter, setCollectionFilter] = createSignal<string | null>(null);
   const [operationFilters, setOperationFilters] = createSignal<Set<OperationType>>(new Set());
   const [collectionNames, setCollectionNames] = createSignal<string[]>([]);
-  let lastRenderedEventId: string | null = null;
 
   const { theme } = props;
 
   createEffect(() => {
-    props.debugger.catalog.collectionNames().get()
-      .then(setCollectionNames)
-      .catch(() => setCollectionNames([]));
+    const subscription = props.debugger.catalog.collectionNames().observe().subscribe({
+      next: (names) => setCollectionNames(names),
+      error: () => setCollectionNames([]),
+    });
+    onCleanup(() => subscription.unsubscribe());
   });
 
   const toggleOperationFilter = (op: OperationType) => {
@@ -50,21 +50,35 @@ export function EventsPanel(props: EventsPanelProps) {
     });
   };
 
-  const latestEvent = fromObservable(
-    props.debugger.events.stream().observe(),
-    {
-      initialValue: null as ChangeEvent | null,
-      onError: (err) => setError(err instanceof Error ? err.message : "Failed to stream events"),
-    }
-  );
-
   createEffect(() => {
-    const event = latestEvent();
-    if (!event || isPaused()) return;
-    if (event.id === lastRenderedEventId) return;
-    lastRenderedEventId = event.id;
-    setEvents((prev) => [event, ...prev].slice(0, 200));
-    setError(null);
+    void props.debugger.events
+      .history({ limit: 200 })
+      .get()
+      .then((buffered) => {
+        setEvents(buffered);
+        setError(null);
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : "Failed to load events");
+      });
+
+    const subscription = props.debugger.events.stream().observe().subscribe({
+      next: (event) => {
+        if (isPaused()) return;
+        setEvents((prev) => {
+          if (prev.some((entry) => entry.id === event.id)) {
+            return prev;
+          }
+          return [event, ...prev].slice(0, 200);
+        });
+        setError(null);
+      },
+      error: (err) => {
+        setError(err instanceof Error ? err.message : "Failed to stream events");
+      },
+    });
+
+    onCleanup(() => subscription.unsubscribe());
   });
 
   const togglePause = () => {

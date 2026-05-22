@@ -264,6 +264,7 @@ export function ExplorerDebugger(props: ExplorerDebuggerProps): JSX.Element {
       });
     } catch (error) {
       if (generation !== connectGeneration) return;
+      await disconnectDebugger();
       setStatus("error");
       setErrorMessage(error instanceof Error ? error.message : String(error));
     }

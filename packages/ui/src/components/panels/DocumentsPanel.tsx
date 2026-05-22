@@ -194,7 +194,11 @@ export function DocumentsPanel(props: DocumentsPanelProps) {
   };
 
   const selectVersion = (version: DocumentVersion) => {
-    setSelectedDoc({ id: version.documentId, data: version.data });
+    if (version.operation === "DELETE") {
+      setSelectedDoc(null);
+    } else {
+      setSelectedDoc({ id: version.documentId, data: version.data ?? {} });
+    }
     setShowHistory(false);
   };
 

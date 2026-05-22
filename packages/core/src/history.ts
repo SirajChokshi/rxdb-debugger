@@ -5,7 +5,8 @@ export interface DocumentVersion {
   id: string;
   documentId: string;
   collection: string;
-  data: Record<string, unknown>;
+  /** Current document data; null when the version is a DELETE. */
+  data: Record<string, unknown> | null;
   timestamp: number;
   operation: "INSERT" | "UPDATE" | "DELETE";
 }
@@ -32,7 +33,7 @@ export function createHistoryService(
           id: `v${versionIdCounter++}`,
           documentId: event.documentId,
           collection: event.collection,
-          data: (event.data ?? {}) as Record<string, unknown>,
+          data: event.operation === "DELETE" ? null : (event.data ?? {}),
           timestamp: event.timestamp,
           operation: event.operation,
         };

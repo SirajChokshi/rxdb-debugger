@@ -1,7 +1,9 @@
 import type { RxCollection, RxDatabase, RxJsonSchema } from "rxdb/plugins/core";
-import { combineLatest, Observable, of } from "rxjs";
+import { combineLatest, Observable } from "rxjs";
 import { map } from "rxjs/operators";
 import { createQuery, type ExplorerQuery, type LiveOptions } from "./query.js";
+
+const COLLECTION_SYNC_INTERVAL_MS = 2000;
 
 /**
  * Information about a single collection.
@@ -94,23 +96,51 @@ function createCollectionInfoObservable(
 
 /**
  * Create an observable for all collections info with live count updates.
+ * Re-subscribes when collections are added or removed at runtime.
  */
 function createAllCollectionsObservable(
   db: RxDatabase,
 ): Observable<CollectionInfo[]> {
-  const collectionEntries = Object.entries(db.collections);
+  return new Observable<CollectionInfo[]>((subscriber) => {
+    let innerSub: { unsubscribe: () => void } | null = null;
+    let lastCollectionKeys = "";
 
-  if (collectionEntries.length === 0) {
-    return of([]);
-  }
+    const syncCollections = (): void => {
+      const collectionEntries = Object.entries(db.collections);
+      const nextKeys = collectionEntries
+        .map(([name]) => name)
+        .sort()
+        .join(",");
 
-  const collectionInfos$ = collectionEntries.map(([_, collection]) =>
-    createCollectionInfoObservable(collection as RxCollection),
-  );
+      if (nextKeys === lastCollectionKeys && innerSub) {
+        return;
+      }
 
-  return combineLatest(collectionInfos$).pipe(
-    map((infos) => infos.sort((a, b) => a.name.localeCompare(b.name))),
-  );
+      lastCollectionKeys = nextKeys;
+      innerSub?.unsubscribe();
+
+      if (collectionEntries.length === 0) {
+        subscriber.next([]);
+        return;
+      }
+
+      const collectionInfos$ = collectionEntries.map(([_, collection]) =>
+        createCollectionInfoObservable(collection as RxCollection),
+      );
+
+      innerSub = combineLatest(collectionInfos$)
+        .pipe(map((infos) => infos.sort((a, b) => a.name.localeCompare(b.name))))
+        .subscribe(subscriber);
+    };
+
+    syncCollections();
+    const intervalId = setInterval(syncCollections, COLLECTION_SYNC_INTERVAL_MS);
+
+    return () => {
+      clearInterval(intervalId);
+      innerSub?.unsubscribe();
+    };
+  });
 }
 
 /**
@@ -169,16 +199,34 @@ export function createCatalogService(
 
     collectionNames(): ExplorerQuery<string[]> {
       const source$ = new Observable<string[]>((subscriber) => {
+        let intervalId: ReturnType<typeof setInterval> | null = null;
+        let lastKeys = "";
+
         getDb()
           .then((db) => {
-            const names = Object.keys(db.collections).sort();
-            subscriber.next(names);
-            subscriber.complete();
+            const emitNames = (): void => {
+              const names = Object.keys(db.collections).sort();
+              const nextKeys = names.join(",");
+              if (nextKeys === lastKeys) {
+                return;
+              }
+              lastKeys = nextKeys;
+              subscriber.next(names);
+            };
+
+            emitNames();
+            intervalId = setInterval(emitNames, COLLECTION_SYNC_INTERVAL_MS);
           })
           .catch((err) => subscriber.error(err));
+
+        return () => {
+          if (intervalId) {
+            clearInterval(intervalId);
+          }
+        };
       });
 
-      return createQuery(source$);
+      return createQuery(source$, { live: true });
     },
   };
 }
