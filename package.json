@@ -7,6 +7,7 @@
   "scripts": {
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
+    "test": "bun test",
     "build": "bun run lint && bun run --filter '@rxdb-debugger/*' build",
     "build:libs": "bun run --filter '@rxdb-debugger/core' build && bun run --filter '@rxdb-debugger/ui' build",
     "build:ext": "bun run --filter chrome-extension build",
