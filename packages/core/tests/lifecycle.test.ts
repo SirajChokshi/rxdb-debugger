@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { REPLICATION_STATE_BY_COLLECTION } from "rxdb/plugins/replication";
-import { Observable, Subject } from "rxjs";
+import { config, Observable, Subject } from "rxjs";
 import { createDocumentsService } from "../src/documents";
 import { createEventsService, type ChangeEvent, type EventsService } from "../src/events";
 import { createHistoryService, type HistoryService } from "../src/history";
@@ -20,6 +20,10 @@ function deferred<T>() {
 async function flushMicrotasks(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
+}
+
+async function flushStoppedNotifications(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 describe("core observable lifecycle", () => {
@@ -275,6 +279,74 @@ describe("core observable lifecycle", () => {
     expect(activeSubscribeCount).toBe(0);
 
     service.dispose();
+  });
+
+  test("does not leak stopped replication snapshot subscribers after snapshot get", async () => {
+    const previousHandler = config.onStoppedNotification;
+    const stoppedKinds: string[] = [];
+    config.onStoppedNotification = (notification) => {
+      stoppedKinds.push(notification.kind);
+    };
+
+    try {
+      const active$ = new Subject<boolean>();
+      const collection = {};
+      const replicationState = {
+        replicationIdentifier: "heroes-sync",
+        live: true,
+        active$,
+        isPaused: () => false,
+        isStopped: () => false,
+      };
+      const db = {
+        collections: {
+          heroes: collection,
+        },
+      };
+
+      (REPLICATION_STATE_BY_COLLECTION as unknown as WeakMap<object, unknown[]>).set(
+        collection,
+        [replicationState],
+      );
+
+      const service = createReplicationService(async () => db as never);
+
+      await service.states().get();
+      active$.next(true);
+      await flushStoppedNotifications();
+
+      expect(stoppedKinds).toEqual([]);
+
+      service.dispose();
+    } finally {
+      config.onStoppedNotification = previousHandler;
+    }
+  });
+
+  test("does not report replication initialization errors after unsubscribe", async () => {
+    const previousHandler = config.onStoppedNotification;
+    const stoppedKinds: string[] = [];
+    const startup = deferred<never>();
+
+    config.onStoppedNotification = (notification) => {
+      stoppedKinds.push(notification.kind);
+    };
+
+    try {
+      const service = createReplicationService(() => startup.promise);
+      const subscription = service.states({ live: true }).observe().subscribe();
+
+      subscription.unsubscribe();
+      startup.reject(new Error("db failed"));
+      await flushMicrotasks();
+      await flushStoppedNotifications();
+
+      expect(stoppedKinds).toEqual([]);
+
+      service.dispose();
+    } finally {
+      config.onStoppedNotification = previousHandler;
+    }
   });
 
   test("starts history tracking lazily and disposes its stream subscription", async () => {

@@ -629,9 +629,16 @@ export function createReplicationService(
           innerSub = snapshots$
             .pipe(map(selector))
             .subscribe(subscriber);
+
+          if (unsubscribed || subscriber.closed) {
+            innerSub.unsubscribe();
+            innerSub = null;
+          }
         })
         .catch((error) => {
-          subscriber.error(error);
+          if (!unsubscribed && !subscriber.closed) {
+            subscriber.error(error);
+          }
         });
 
       return () => {
