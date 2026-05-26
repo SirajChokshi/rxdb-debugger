@@ -85,12 +85,6 @@ export function Debugger(props: DebuggerProps): JSX.Element {
         onTabChange={(id) => setActiveTab(id as PanelId)}
       />
       <div class="flex flex-col flex-1 min-h-0 overflow-hidden">
-        <div
-          class={activeTab() === "events" ? "flex flex-col flex-1 min-h-0 overflow-hidden" : "hidden"}
-          aria-hidden={activeTab() !== "events"}
-        >
-          <EventsPanel theme={theme()} debugger={props.debugger} />
-        </div>
         <Switch>
           <Match when={activeTab() === "collections"}>
             <CollectionsPanel theme={theme()} debugger={props.debugger} />
@@ -107,6 +101,9 @@ export function Debugger(props: DebuggerProps): JSX.Element {
           </Match>
           <Match when={activeTab() === "replication"}>
             <ReplicationPanel theme={theme()} debugger={props.debugger} />
+          </Match>
+          <Match when={activeTab() === "events"}>
+            <EventsPanel theme={theme()} debugger={props.debugger} />
           </Match>
           <Match when={activeTab() === "performance"}>
             <PerformancePanel theme={theme()} debugger={props.debugger} />

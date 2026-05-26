@@ -1,7 +1,7 @@
 import type { RxCollection, RxDatabase, RxJsonSchema } from "rxdb/plugins/core";
 import { combineLatest, Observable, of } from "rxjs";
 import { map } from "rxjs/operators";
-import { createQuery, type ExplorerQuery, type LiveOptions } from "./query.js";
+import { createAsyncObservable, createQuery, type ExplorerQuery, type LiveOptions } from "./query.js";
 
 /**
  * Information about a single collection.
@@ -121,19 +121,9 @@ export function createCatalogService(
 ): CatalogService {
   return {
     collections(options: LiveOptions = {}): ExplorerQuery<CollectionInfo[]> {
-      const source$ = new Observable<CollectionInfo[]>((subscriber) => {
-        let innerSub: { unsubscribe: () => void } | null = null;
-
-        getDb()
-          .then((db) => {
-            innerSub = createAllCollectionsObservable(db).subscribe(subscriber);
-          })
-          .catch((err) => subscriber.error(err));
-
-        return () => {
-          innerSub?.unsubscribe();
-        };
-      });
+      const source$ = createAsyncObservable(async () =>
+        createAllCollectionsObservable(await getDb())
+      );
 
       return createQuery(source$, options);
     },
@@ -142,26 +132,14 @@ export function createCatalogService(
       name: string,
       options: LiveOptions = {},
     ): ExplorerQuery<CollectionInfo | null> {
-      const source$ = new Observable<CollectionInfo | null>((subscriber) => {
-        let innerSub: { unsubscribe: () => void } | null = null;
+      const source$ = createAsyncObservable(async () => {
+        const db = await getDb();
+        const collection = db.collections[name] as RxCollection | undefined;
+        if (!collection) {
+          return of(null);
+        }
 
-        getDb()
-          .then((db) => {
-            const collection = db.collections[name] as RxCollection | undefined;
-            if (!collection) {
-              subscriber.next(null);
-              subscriber.complete();
-              return;
-            }
-
-            innerSub =
-              createCollectionInfoObservable(collection).subscribe(subscriber);
-          })
-          .catch((err) => subscriber.error(err));
-
-        return () => {
-          innerSub?.unsubscribe();
-        };
+        return createCollectionInfoObservable(collection);
       });
 
       return createQuery(source$, options);

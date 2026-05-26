@@ -6,9 +6,9 @@ import type {
   RxDatabase,
   RxDocument,
 } from "rxdb/plugins/core";
-import { Observable, of } from "rxjs";
+import { of } from "rxjs";
 import { map } from "rxjs/operators";
-import { createQuery, type ExplorerQuery, type LiveOptions } from "./query.js";
+import { createAsyncObservable, createQuery, type ExplorerQuery, type LiveOptions } from "./query.js";
 
 /**
  * Options for listing documents.
@@ -241,31 +241,19 @@ export function createDocumentsService(
     ): ExplorerQuery<DocumentResult[]> {
       const { selector, sort, skip, limit, live = false } = options;
 
-      const source$ = new Observable<DocumentResult[]>((subscriber) => {
-        let innerSub: { unsubscribe: () => void } | null = null;
+      const source$ = createAsyncObservable(async () => {
+        const db = await getDb();
+        const collection = getCollection(db, collectionName);
 
-        getDb()
-          .then((db) => {
-            const collection = getCollection(db, collectionName);
+        const query: MangoQuery<unknown> = {};
+        if (selector) query.selector = selector;
+        if (sort) query.sort = sort;
+        if (skip !== undefined) query.skip = skip;
+        if (limit !== undefined) query.limit = limit;
 
-            const query: MangoQuery<unknown> = {};
-            if (selector) query.selector = selector;
-            if (sort) query.sort = sort;
-            if (skip !== undefined) query.skip = skip;
-            if (limit !== undefined) query.limit = limit;
-
-            const rxQuery = collection.find(query);
-            const docs$ = rxQuery.$.pipe(
-              map((docs) => docs.map(toDocumentResult)),
-            );
-
-            innerSub = docs$.subscribe(subscriber);
-          })
-          .catch((err) => subscriber.error(err));
-
-        return () => {
-          innerSub?.unsubscribe();
-        };
+        return collection.find(query).$.pipe(
+          map((docs) => docs.map(toDocumentResult)),
+        );
       });
 
       return createQuery(source$, { live });
@@ -278,23 +266,13 @@ export function createDocumentsService(
     ): ExplorerQuery<DocumentResult | null> {
       const { live = false } = options;
 
-      const source$ = new Observable<DocumentResult | null>((subscriber) => {
-        let innerSub: { unsubscribe: () => void } | null = null;
+      const source$ = createAsyncObservable(async () => {
+        const db = await getDb();
+        const collection = getCollection(db, collectionName);
 
-        getDb()
-          .then((db) => {
-            const collection = getCollection(db, collectionName);
-            const doc$ = collection
-              .findOne(id)
-              .$.pipe(map((doc) => (doc ? toDocumentResult(doc) : null)));
-
-            innerSub = doc$.subscribe(subscriber);
-          })
-          .catch((err) => subscriber.error(err));
-
-        return () => {
-          innerSub?.unsubscribe();
-        };
+        return collection
+          .findOne(id)
+          .$.pipe(map((doc) => (doc ? toDocumentResult(doc) : null)));
       });
 
       return createQuery(source$, { live });
@@ -311,35 +289,24 @@ export function createDocumentsService(
         return createQuery(of([]), { live: false });
       }
 
-      const source$ = new Observable<DocumentResult[]>((subscriber) => {
-        let innerSub: { unsubscribe: () => void } | null = null;
+      const source$ = createAsyncObservable(async () => {
+        const db = await getDb();
+        const collection = getCollection(db, collectionName);
 
-        getDb()
-          .then((db) => {
-            const collection = getCollection(db, collectionName);
-
-            // findByIds returns a Map, not an array
-            // We need to use the $ observable version
-            const docs$ = collection.findByIds(ids).$.pipe(
-              map((docMap) => {
-                const results: DocumentResult[] = [];
-                for (const id of ids) {
-                  const doc = docMap.get(id);
-                  if (doc) {
-                    results.push(toDocumentResult(doc));
-                  }
-                }
-                return results;
-              }),
-            );
-
-            innerSub = docs$.subscribe(subscriber);
-          })
-          .catch((err) => subscriber.error(err));
-
-        return () => {
-          innerSub?.unsubscribe();
-        };
+        // findByIds returns a Map, not an array. Use the observable version
+        // so live consumers stay in sync with RxDB document changes.
+        return collection.findByIds(ids).$.pipe(
+          map((docMap) => {
+            const results: DocumentResult[] = [];
+            for (const id of ids) {
+              const doc = docMap.get(id);
+              if (doc) {
+                results.push(toDocumentResult(doc));
+              }
+            }
+            return results;
+          }),
+        );
       });
 
       return createQuery(source$, { live });
@@ -351,19 +318,10 @@ export function createDocumentsService(
     ): ExplorerQuery<number> {
       const { live = false } = options;
 
-      const source$ = new Observable<number>((subscriber) => {
-        let innerSub: { unsubscribe: () => void } | null = null;
-
-        getDb()
-          .then((db) => {
-            const collection = getCollection(db, collectionName);
-            innerSub = collection.count().$.subscribe(subscriber);
-          })
-          .catch((err) => subscriber.error(err));
-
-        return () => {
-          innerSub?.unsubscribe();
-        };
+      const source$ = createAsyncObservable(async () => {
+        const db = await getDb();
+        const collection = getCollection(db, collectionName);
+        return collection.count().$;
       });
 
       return createQuery(source$, { live });

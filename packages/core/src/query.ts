@@ -31,6 +31,47 @@ export interface ExplorerQuery<T> {
 }
 
 /**
+ * Create an observable whose inner live source is resolved asynchronously.
+ *
+ * RxDB handles are often behind a Promise, while Solid can dispose reactive
+ * scopes synchronously. This guards the gap so an unsubscribe that happens
+ * before the Promise resolves cannot leave an inner RxDB subscription behind.
+ */
+export function createAsyncObservable<T>(
+  getSource: () => Promise<Observable<T>>,
+): Observable<T> {
+  return new Observable<T>((subscriber) => {
+    let innerSub: { unsubscribe: () => void } | null = null;
+    let disposed = false;
+
+    getSource()
+      .then((source$) => {
+        if (disposed || subscriber.closed) {
+          return;
+        }
+
+        innerSub = source$.subscribe(subscriber);
+
+        if (disposed || subscriber.closed) {
+          innerSub.unsubscribe();
+          innerSub = null;
+        }
+      })
+      .catch((error) => {
+        if (!disposed && !subscriber.closed) {
+          subscriber.error(error);
+        }
+      });
+
+    return () => {
+      disposed = true;
+      innerSub?.unsubscribe();
+      innerSub = null;
+    };
+  });
+}
+
+/**
  * Create an ExplorerQuery from a live observable source.
  *
  * @param source$ - The live observable that emits on changes

@@ -159,6 +159,7 @@ export class RxdbDebugger<T extends RxDatabase = RxDatabase> {
       return;
     }
     this._disposed = true;
+    this.history.dispose();
     this._events.dispose();
     this._performance.dispose();
     this.replication.dispose();
