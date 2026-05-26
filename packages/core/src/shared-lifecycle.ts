@@ -64,7 +64,11 @@ export class SharedAsyncInitializer {
     this.promise = (async () => {
       try {
         await start(context);
-        this.state = context.shouldContinue() ? "ready" : "idle";
+        this.state = this.state === "disposed"
+          ? "disposed"
+          : context.shouldContinue()
+            ? "ready"
+            : "idle";
       } catch (error) {
         this.state = this.state === "disposed" ? "disposed" : "idle";
         throw error;

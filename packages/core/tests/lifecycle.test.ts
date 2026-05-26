@@ -5,6 +5,7 @@ import { createDocumentsService } from "../src/documents";
 import { createEventsService, type ChangeEvent, type EventsService } from "../src/events";
 import { createHistoryService, type HistoryService } from "../src/history";
 import { createReplicationService, type ReplicationStateSnapshot } from "../src/replication";
+import { SharedAsyncInitializer } from "../src/shared-lifecycle.js";
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -22,6 +23,30 @@ async function flushMicrotasks(): Promise<void> {
 }
 
 describe("core observable lifecycle", () => {
+  test("keeps shared initializer disposed after in-flight startup resolves", async () => {
+    const startup = deferred<void>();
+    const lifecycle = new SharedAsyncInitializer();
+    const release = lifecycle.retain();
+    let startCount = 0;
+
+    const firstStart = lifecycle.ensureStarted(async () => {
+      startCount += 1;
+      await startup.promise;
+    });
+
+    lifecycle.dispose();
+    startup.resolve();
+    await firstStart;
+
+    await lifecycle.ensureStarted(async () => {
+      startCount += 1;
+    }, { force: true });
+
+    release();
+
+    expect(startCount).toBe(1);
+  });
+
   test("does not subscribe to live document queries after the outer subscriber is disposed", async () => {
     const dbDeferred = deferred<unknown>();
     let querySubscribeCount = 0;
