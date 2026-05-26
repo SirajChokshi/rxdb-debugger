@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { Observable } from "rxjs";
+import { REPLICATION_STATE_BY_COLLECTION } from "rxdb/plugins/replication";
+import { Observable, Subject } from "rxjs";
 import { createDocumentsService } from "../src/documents";
 import { createEventsService, type ChangeEvent, type EventsService } from "../src/events";
 import { createHistoryService, type HistoryService } from "../src/history";
+import { createReplicationService, type ReplicationStateSnapshot } from "../src/replication";
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -81,6 +83,171 @@ describe("core observable lifecycle", () => {
 
     expect(collectionSubscribeCount).toBe(0);
     expect(collectionUnsubscribeCount).toBe(0);
+
+    service.dispose();
+  });
+
+  test("keeps event infrastructure alive when a concurrent subscriber remains active", async () => {
+    const dbDeferred = deferred<unknown>();
+    const collectionEvents$ = new Subject<unknown>();
+    const receivedEvents: ChangeEvent[] = [];
+    let collectionSubscribeCount = 0;
+
+    const collection$ = new Observable<unknown>((subscriber) => {
+      collectionSubscribeCount += 1;
+      return collectionEvents$.subscribe(subscriber);
+    });
+
+    const db = {
+      collections: {
+        heroes: {
+          $: collection$,
+        },
+      },
+    };
+
+    const service = createEventsService(() => dbDeferred.promise as Promise<never>);
+    const firstSubscription = service.stream().observe().subscribe();
+    const secondSubscription = service.stream().observe().subscribe((event) => {
+      receivedEvents.push(event);
+    });
+
+    firstSubscription.unsubscribe();
+    dbDeferred.resolve(db);
+    await flushMicrotasks();
+
+    collectionEvents$.next({
+      operation: "INSERT",
+      documentId: "hero-1",
+      documentData: { id: "hero-1" },
+    });
+
+    expect(collectionSubscribeCount).toBe(1);
+    expect(receivedEvents).toHaveLength(1);
+    expect(receivedEvents[0]).toMatchObject({
+      collection: "heroes",
+      operation: "INSERT",
+      documentId: "hero-1",
+      data: { id: "hero-1" },
+    });
+
+    secondSubscription.unsubscribe();
+    service.dispose();
+  });
+
+  test("does not start event infrastructure when all concurrent subscribers leave before startup resolves", async () => {
+    const dbDeferred = deferred<unknown>();
+    let collectionSubscribeCount = 0;
+
+    const collection$ = new Observable<unknown>(() => {
+      collectionSubscribeCount += 1;
+    });
+
+    const db = {
+      collections: {
+        heroes: {
+          $: collection$,
+        },
+      },
+    };
+
+    const service = createEventsService(() => dbDeferred.promise as Promise<never>);
+    const firstSubscription = service.stream().observe().subscribe();
+    const secondSubscription = service.stream().observe().subscribe();
+
+    firstSubscription.unsubscribe();
+    secondSubscription.unsubscribe();
+    dbDeferred.resolve(db);
+    await flushMicrotasks();
+
+    expect(collectionSubscribeCount).toBe(0);
+
+    service.dispose();
+  });
+
+  test("keeps replication discovery alive when a concurrent subscriber remains active", async () => {
+    const dbDeferred = deferred<unknown>();
+    const active$ = new Subject<boolean>();
+    const snapshots: ReplicationStateSnapshot[][] = [];
+    const collection = {};
+    const replicationState = {
+      replicationIdentifier: "heroes-sync",
+      live: true,
+      active$,
+      isPaused: () => false,
+      isStopped: () => false,
+    };
+    const db = {
+      collections: {
+        heroes: collection,
+      },
+    };
+
+    (REPLICATION_STATE_BY_COLLECTION as unknown as WeakMap<object, unknown[]>).set(
+      collection,
+      [replicationState],
+    );
+
+    const service = createReplicationService(() => dbDeferred.promise as Promise<never>);
+    const firstSubscription = service.states({ live: true }).observe().subscribe();
+    const secondSubscription = service.states({ live: true }).observe().subscribe((value) => {
+      snapshots.push(value);
+    });
+
+    firstSubscription.unsubscribe();
+    dbDeferred.resolve(db);
+    await flushMicrotasks();
+
+    active$.next(true);
+    await flushMicrotasks();
+
+    expect(snapshots.some((value) =>
+      value.some((snapshot) =>
+        snapshot.collection === "heroes"
+        && snapshot.replicationIdentifier === "heroes-sync"
+        && snapshot.isActive
+      )
+    )).toBe(true);
+
+    secondSubscription.unsubscribe();
+    service.dispose();
+  });
+
+  test("does not start replication discovery when all concurrent subscribers leave before startup resolves", async () => {
+    const dbDeferred = deferred<unknown>();
+    let activeSubscribeCount = 0;
+    const active$ = new Observable<boolean>(() => {
+      activeSubscribeCount += 1;
+    });
+    const collection = {};
+    const replicationState = {
+      replicationIdentifier: "heroes-sync",
+      live: true,
+      active$,
+      isPaused: () => false,
+      isStopped: () => false,
+    };
+    const db = {
+      collections: {
+        heroes: collection,
+      },
+    };
+
+    (REPLICATION_STATE_BY_COLLECTION as unknown as WeakMap<object, unknown[]>).set(
+      collection,
+      [replicationState],
+    );
+
+    const service = createReplicationService(() => dbDeferred.promise as Promise<never>);
+    const firstSubscription = service.states({ live: true }).observe().subscribe();
+    const secondSubscription = service.states({ live: true }).observe().subscribe();
+
+    firstSubscription.unsubscribe();
+    secondSubscription.unsubscribe();
+    dbDeferred.resolve(db);
+    await flushMicrotasks();
+
+    expect(activeSubscribeCount).toBe(0);
 
     service.dispose();
   });

@@ -2,6 +2,7 @@ import type { RxChangeEvent, RxCollection, RxDatabase } from "rxdb/plugins/core"
 import { Observable, Subject, BehaviorSubject } from "rxjs";
 import { filter, map, take, takeUntil } from "rxjs/operators";
 import { createStaticQuery, type ExplorerQuery } from "./query.js";
+import { SharedAsyncInitializer } from "./shared-lifecycle.js";
 
 /**
  * Types of document operations.
@@ -153,37 +154,33 @@ export function createEventsService(
   const eventBuffer: ChangeEvent[] = [];
   const eventSubject = new Subject<ChangeEvent>();
 
-  let initialized = false;
-  let disposed = false;
+  const lifecycle = new SharedAsyncInitializer();
   let subscriptions: { unsubscribe: () => void }[] = [];
 
-  const initialize = async (
-    shouldContinue: () => boolean = () => true,
-  ): Promise<void> => {
-    if (initialized || disposed) return;
-    initialized = true;
+  const initialize = async (force = false): Promise<void> => {
+    await lifecycle.ensureStarted(async ({ shouldContinue }) => {
+      const db = await getDb();
+      if (!shouldContinue()) {
+        return;
+      }
 
-    const db = await getDb();
-    if (disposed || !shouldContinue()) {
-      initialized = false;
-      return;
-    }
+      for (const [name, collection] of Object.entries(db.collections)) {
+        const col = collection as RxCollection;
+        const sub = col.$.pipe(
+          takeUntil(destroy$),
+          filter(() => !paused$.value),
+          map((event) => toChangeEvent(event, name)),
+        ).subscribe((event) => {
+          eventBuffer.push(event);
+          while (eventBuffer.length > bufferSize) {
+            eventBuffer.shift();
+          }
+          eventSubject.next(event);
+        });
+        subscriptions.push(sub);
+      }
 
-    for (const [name, collection] of Object.entries(db.collections)) {
-      const col = collection as RxCollection;
-      const sub = col.$.pipe(
-        takeUntil(destroy$),
-        filter(() => !paused$.value),
-        map((event) => toChangeEvent(event, name)),
-      ).subscribe((event) => {
-        eventBuffer.push(event);
-        while (eventBuffer.length > bufferSize) {
-          eventBuffer.shift();
-        }
-        eventSubject.next(event);
-      });
-      subscriptions.push(sub);
-    }
+    }, { force });
   };
 
   return {
@@ -191,33 +188,32 @@ export function createEventsService(
       const { collections, operations } = options;
 
       const source$ = new Observable<ChangeEvent>((subscriber) => {
-        let innerSub: { unsubscribe: () => void } | null = null;
         let unsubscribed = false;
+        const release = lifecycle.retain();
+        const innerSub = eventSubject
+          .pipe(
+            filter((event) => {
+              if (collections && !collections.includes(event.collection)) {
+                return false;
+              }
+              if (operations && !operations.includes(event.operation)) {
+                return false;
+              }
+              return true;
+            }),
+          )
+          .subscribe(subscriber);
 
-        initialize(() => !unsubscribed && !subscriber.closed).then(() => {
-          if (unsubscribed || subscriber.closed) {
-            return;
+        initialize().catch((err) => {
+          if (!unsubscribed && !subscriber.closed) {
+            subscriber.error(err);
           }
-          innerSub = eventSubject
-            .pipe(
-              filter((event) => {
-                if (collections && !collections.includes(event.collection)) {
-                  return false;
-                }
-                if (operations && !operations.includes(event.operation)) {
-                  return false;
-                }
-                return true;
-              }),
-            )
-            .subscribe(subscriber);
-        }).catch((err) => subscriber.error(err));
+        });
 
         return () => {
-          if (innerSub) {
-            innerSub.unsubscribe();
-          }
+          innerSub.unsubscribe();
           unsubscribed = true;
+          release();
         };
       });
 
@@ -240,7 +236,7 @@ export function createEventsService(
       const { limit, collections, operations } = options;
 
       return createStaticQuery(async () => {
-        await initialize();
+        await initialize(true);
 
         let events = [...eventBuffer];
 
@@ -263,7 +259,7 @@ export function createEventsService(
 
     count(): ExplorerQuery<number> {
       return createStaticQuery(async () => {
-        await initialize();
+        await initialize(true);
         return eventBuffer.length;
       });
     },
@@ -285,17 +281,16 @@ export function createEventsService(
     },
 
     dispose(): void {
-      if (disposed) return;
-      disposed = true;
-      destroy$.next();
-      destroy$.complete();
-      paused$.complete();
-      eventSubject.complete();
-      for (const sub of subscriptions) {
-        sub.unsubscribe();
-      }
-      subscriptions = [];
-      initialized = false;
+      lifecycle.dispose(() => {
+        destroy$.next();
+        destroy$.complete();
+        paused$.complete();
+        eventSubject.complete();
+        for (const sub of subscriptions) {
+          sub.unsubscribe();
+        }
+        subscriptions = [];
+      });
     },
   };
 }

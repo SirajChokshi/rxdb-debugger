@@ -3,6 +3,7 @@ import { REPLICATION_STATE_BY_COLLECTION } from "rxdb/plugins/replication";
 import { BehaviorSubject, Observable } from "rxjs";
 import { map } from "rxjs/operators";
 import { createQuery, type ExplorerQuery, type LiveOptions } from "./query.js";
+import { SharedAsyncInitializer } from "./shared-lifecycle.js";
 
 const STATE_DISCOVERY_INTERVAL_MS = 1500;
 const MAX_RECENT_ERRORS = 10;
@@ -316,8 +317,8 @@ export function createReplicationService(
 
   let stateIdCounter = 0;
   let knownCollectionNames: string[] = [];
-  let initialized = false;
   let disposed = false;
+  const lifecycle = new SharedAsyncInitializer();
   let discoveryInterval: ReturnType<typeof setInterval> | null = null;
 
   const emitSnapshots = (): void => {
@@ -595,28 +596,21 @@ export function createReplicationService(
   };
 
   const initialize = async (
-    shouldContinue: () => boolean = () => true,
+    force = false,
   ): Promise<void> => {
-    if (initialized || disposed) return;
-    initialized = true;
-
-    try {
+    await lifecycle.ensureStarted(async ({ shouldContinue }) => {
       await refreshDiscoveredStates(shouldContinue);
       if (disposed || !shouldContinue()) {
-        initialized = false;
         return;
       }
-      if (!disposed && shouldContinue()) {
+      if (!disposed) {
         discoveryInterval = setInterval(() => {
           void refreshDiscoveredStates().catch(() => {
             // Discovery retries on next interval.
           });
         }, STATE_DISCOVERY_INTERVAL_MS);
       }
-    } catch (error) {
-      initialized = false;
-      throw error;
-    }
+    }, { force });
   };
 
   const createSource$ = <T,>(
@@ -625,8 +619,9 @@ export function createReplicationService(
     return new Observable<T>((subscriber) => {
       let innerSub: { unsubscribe: () => void } | null = null;
       let unsubscribed = false;
+      const release = lifecycle.retain();
 
-      initialize(() => !unsubscribed && !subscriber.closed)
+      initialize()
         .then(() => {
           if (unsubscribed || subscriber.closed) {
             return;
@@ -641,6 +636,7 @@ export function createReplicationService(
 
       return () => {
         unsubscribed = true;
+        release();
         innerSub?.unsubscribe();
       };
     });
@@ -661,7 +657,7 @@ export function createReplicationService(
     replicationIdentifier: string,
     action: "reSync" | "pause" | "start",
   ): Promise<boolean> => {
-    await initialize();
+    await initialize(true);
 
     const matches = getMatchingStates(collectionName, replicationIdentifier);
     if (matches.length === 0) {
@@ -715,26 +711,27 @@ export function createReplicationService(
     },
 
     async refresh(): Promise<void> {
-      await initialize();
+      await initialize(true);
       await refreshDiscoveredStates();
     },
 
     dispose(): void {
       if (disposed) return;
       disposed = true;
-
-      if (discoveryInterval) {
-        clearInterval(discoveryInterval);
-        discoveryInterval = null;
-      }
-
-      for (const tracked of trackedStates.values()) {
-        for (const sub of tracked.subscriptions) {
-          sub.unsubscribe();
+      lifecycle.dispose(() => {
+        if (discoveryInterval) {
+          clearInterval(discoveryInterval);
+          discoveryInterval = null;
         }
-      }
-      trackedStates.clear();
-      snapshots$.complete();
+
+        for (const tracked of trackedStates.values()) {
+          for (const sub of tracked.subscriptions) {
+            sub.unsubscribe();
+          }
+        }
+        trackedStates.clear();
+        snapshots$.complete();
+      });
     },
   };
 }
