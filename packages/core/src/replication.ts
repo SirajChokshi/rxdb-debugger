@@ -576,10 +576,12 @@ export function createReplicationService(
     return rawStates.filter(isReplicationStateLike);
   };
 
-  const refreshDiscoveredStates = async (): Promise<void> => {
-    if (disposed) return;
+  const refreshDiscoveredStates = async (
+    shouldContinue: () => boolean = () => true,
+  ): Promise<void> => {
+    if (disposed || !shouldContinue()) return;
     const db = await getDb();
-    if (disposed) return;
+    if (disposed || !shouldContinue()) return;
 
     knownCollectionNames = Object.keys(db.collections).sort();
     for (const collectionName of knownCollectionNames) {
@@ -592,13 +594,19 @@ export function createReplicationService(
     emitSnapshots();
   };
 
-  const initialize = async (): Promise<void> => {
-    if (initialized) return;
+  const initialize = async (
+    shouldContinue: () => boolean = () => true,
+  ): Promise<void> => {
+    if (initialized || disposed) return;
     initialized = true;
 
     try {
-      await refreshDiscoveredStates();
-      if (!disposed) {
+      await refreshDiscoveredStates(shouldContinue);
+      if (disposed || !shouldContinue()) {
+        initialized = false;
+        return;
+      }
+      if (!disposed && shouldContinue()) {
         discoveryInterval = setInterval(() => {
           void refreshDiscoveredStates().catch(() => {
             // Discovery retries on next interval.
@@ -616,9 +624,13 @@ export function createReplicationService(
   ): Observable<T> => {
     return new Observable<T>((subscriber) => {
       let innerSub: { unsubscribe: () => void } | null = null;
+      let unsubscribed = false;
 
-      initialize()
+      initialize(() => !unsubscribed && !subscriber.closed)
         .then(() => {
+          if (unsubscribed || subscriber.closed) {
+            return;
+          }
           innerSub = snapshots$
             .pipe(map(selector))
             .subscribe(subscriber);
@@ -628,6 +640,7 @@ export function createReplicationService(
         });
 
       return () => {
+        unsubscribed = true;
         innerSub?.unsubscribe();
       };
     });

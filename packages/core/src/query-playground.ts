@@ -376,10 +376,14 @@ export function createQueryService(
 
       const source$ = new Observable<QueryResult>((subscriber) => {
         let innerSub: { unsubscribe: () => void } | null = null;
+        let disposed = false;
         const startTime = performance.now();
 
         getDb()
           .then((db) => {
+            if (disposed || subscriber.closed) {
+              return;
+            }
             const collection = getCollection(db, collectionName);
             const rxQuery = collection.find(query);
 
@@ -418,8 +422,15 @@ export function createQueryService(
                   subscriber.error(err);
                 },
               });
+              if (disposed || subscriber.closed) {
+                innerSub.unsubscribe();
+                innerSub = null;
+              }
             } else {
               rxQuery.exec().then((docs) => {
+                if (disposed || subscriber.closed) {
+                  return;
+                }
                 const duration = performance.now() - startTime;
                 const documents = docs.map(toQueryDocument);
                 const result: QueryResult = {
@@ -438,6 +449,9 @@ export function createQueryService(
                 subscriber.next(result);
                 subscriber.complete();
               }).catch((err) => {
+                if (disposed || subscriber.closed) {
+                  return;
+                }
                 addToHistory({
                   collection: collectionName,
                   query,
@@ -451,6 +465,9 @@ export function createQueryService(
             }
           })
           .catch((err) => {
+            if (disposed || subscriber.closed) {
+              return;
+            }
             addToHistory({
               collection: collectionName,
               query,
@@ -463,6 +480,7 @@ export function createQueryService(
           });
 
         return () => {
+          disposed = true;
           innerSub?.unsubscribe();
         };
       });

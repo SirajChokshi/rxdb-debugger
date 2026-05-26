@@ -30,14 +30,6 @@ export interface BridgeEvent {
   payload: unknown;
 }
 
-type RuntimeMessageListener = Parameters<typeof chrome.runtime.onMessage.addListener>[0];
-
-interface RuntimeBridgeEnvelope {
-  channel: string;
-  sessionId: string;
-  event: BridgeEvent;
-}
-
 const BRIDGE_CHANNEL = "RXDB_DEBUGGER_BRIDGE";
 const BRIDGE_TIMEOUT_MS = 15000;
 const HEARTBEAT_INTERVAL_MS = 5000;
@@ -113,7 +105,6 @@ let bridgeSubject: ReplaySubject<BridgeEvent> | null = null;
 let bridgeInitialized = false;
 let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
 let activeSessionId: string | null = null;
-let runtimeMessageListener: RuntimeMessageListener | null = null;
 
 function createSessionId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -129,52 +120,6 @@ function isBridgeEvent(event: unknown): event is BridgeEvent {
     typeof candidate.type === "string"
     && bridgeEventTypes.has(candidate.type as BridgeEventType)
   );
-}
-
-function parseRuntimeBridgeMessage(message: unknown, sessionId: string): BridgeEvent | null {
-  if (typeof message !== "object" || message === null) {
-    return null;
-  }
-
-  const envelope = message as Partial<RuntimeBridgeEnvelope>;
-  if (envelope.channel !== BRIDGE_CHANNEL) {
-    return null;
-  }
-  if (envelope.sessionId !== sessionId) {
-    return null;
-  }
-  if (!isBridgeEvent(envelope.event)) {
-    return null;
-  }
-  return envelope.event;
-}
-
-function removeRuntimeMessageListener(): void {
-  if (!runtimeMessageListener) {
-    return;
-  }
-  chrome.runtime.onMessage.removeListener(runtimeMessageListener);
-  runtimeMessageListener = null;
-}
-
-function attachRuntimeMessageListener(sessionId: string): void {
-  removeRuntimeMessageListener();
-  const tabId = chrome.devtools.inspectedWindow.tabId;
-
-  runtimeMessageListener = (message, sender) => {
-    if (sender.tab?.id !== tabId) {
-      return;
-    }
-
-    const event = parseRuntimeBridgeMessage(message, sessionId);
-    if (!event) {
-      return;
-    }
-
-    bridgeSubject?.next(event);
-  };
-
-  chrome.runtime.onMessage.addListener(runtimeMessageListener);
 }
 
 /**
@@ -203,7 +148,7 @@ export function getCollectionChanges(collectionName: string): Observable<ChangeE
 
 /**
  * Initialize the event bridge.
- * Injects scripts into the page and sets up message listeners.
+ * Injects a page-side bridge and polls its event queue from the DevTools panel.
  */
 export async function initBridge(instanceId: string): Promise<void> {
   if (bridgeInitialized) return;
@@ -230,79 +175,8 @@ export async function initBridge(instanceId: string): Promise<void> {
 }
 
 /**
- * Inject the content script relay via chrome.scripting.executeScript.
- * This listens for postMessage events and forwards them to the extension.
- */
-async function injectContentScriptRelay(sessionId: string): Promise<void> {
-  const tabId = chrome.devtools.inspectedWindow.tabId;
-
-  try {
-    await chrome.scripting.executeScript({
-      target: { tabId },
-      args: [BRIDGE_CHANNEL, sessionId],
-      func: (channel: string, currentSessionId: string) => {
-        interface RelayMessage {
-          channel?: unknown;
-          sessionId?: unknown;
-          event?: unknown;
-        }
-
-        interface RelayState {
-          channel: string;
-          sessionId: string;
-          listener: (event: MessageEvent) => void;
-        }
-
-        const relayWindow = window as typeof window & {
-          __rxdb_debugger_relay_state?: RelayState;
-        };
-
-        const existingRelay = relayWindow.__rxdb_debugger_relay_state;
-        if (existingRelay) {
-          existingRelay.channel = channel;
-          existingRelay.sessionId = currentSessionId;
-          return;
-        }
-
-        const relayState: RelayState = {
-          channel,
-          sessionId: currentSessionId,
-          listener: (event: MessageEvent) => {
-            if (event.source !== window) {
-              return;
-            }
-            if (typeof event.data !== "object" || event.data === null) {
-              return;
-            }
-
-            const message = event.data as RelayMessage;
-            if (message.channel !== relayState.channel) {
-              return;
-            }
-            if (message.sessionId !== relayState.sessionId) {
-              return;
-            }
-
-            chrome.runtime.sendMessage({
-              channel: relayState.channel,
-              sessionId: relayState.sessionId,
-              event: message.event,
-            });
-          }
-        };
-
-        relayWindow.__rxdb_debugger_relay_state = relayState;
-        window.addEventListener("message", relayState.listener);
-      },
-    });
-  } catch (err) {
-    console.warn("Failed to inject content script relay:", err);
-  }
-}
-
-/**
  * Inject the page-context bridge via eval.
- * This subscribes to RxDB events and posts them via postMessage.
+ * This subscribes to RxDB events and stores them in a page-side queue.
  */
 async function injectPageBridge(sessionId: string, instanceId: string): Promise<void> {
   const channelLiteral = JSON.stringify(BRIDGE_CHANNEL);

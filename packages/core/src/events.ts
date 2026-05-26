@@ -154,13 +154,20 @@ export function createEventsService(
   const eventSubject = new Subject<ChangeEvent>();
 
   let initialized = false;
+  let disposed = false;
   let subscriptions: { unsubscribe: () => void }[] = [];
 
-  const initialize = async (): Promise<void> => {
-    if (initialized) return;
+  const initialize = async (
+    shouldContinue: () => boolean = () => true,
+  ): Promise<void> => {
+    if (initialized || disposed) return;
     initialized = true;
 
     const db = await getDb();
+    if (disposed || !shouldContinue()) {
+      initialized = false;
+      return;
+    }
 
     for (const [name, collection] of Object.entries(db.collections)) {
       const col = collection as RxCollection;
@@ -185,8 +192,12 @@ export function createEventsService(
 
       const source$ = new Observable<ChangeEvent>((subscriber) => {
         let innerSub: { unsubscribe: () => void } | null = null;
+        let unsubscribed = false;
 
-        initialize().then(() => {
+        initialize(() => !unsubscribed && !subscriber.closed).then(() => {
+          if (unsubscribed || subscriber.closed) {
+            return;
+          }
           innerSub = eventSubject
             .pipe(
               filter((event) => {
@@ -206,6 +217,7 @@ export function createEventsService(
           if (innerSub) {
             innerSub.unsubscribe();
           }
+          unsubscribed = true;
         };
       });
 
@@ -273,6 +285,8 @@ export function createEventsService(
     },
 
     dispose(): void {
+      if (disposed) return;
+      disposed = true;
       destroy$.next();
       destroy$.complete();
       paused$.complete();
