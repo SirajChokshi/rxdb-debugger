@@ -9,7 +9,7 @@ Debugging and inspection tools for [RxDB](https://rxdb.info/) databases. Browse 
 | [`@rxdb-debugger/core`](packages/core/) | Headless TypeScript API for inspecting RxDB databases |
 | [`@rxdb-debugger/ui`](packages/ui/) | SolidJS UI that mounts into any web app |
 | [`chrome-extension`](packages/chrome-extension/) | Chrome DevTools panel for debugging RxDB in the browser |
-| [`examples/react`](examples/react/) | React demo app with a music catalog database |
+| [`examples/vue`](examples/vue/) | Vue 3 demo app with a music catalog database |
 
 Install the published libraries from npm: [`@rxdb-debugger/core`](https://www.npmjs.com/package/@rxdb-debugger/core) and [`@rxdb-debugger/ui`](https://www.npmjs.com/package/@rxdb-debugger/ui). Peer dependencies: `rxdb@>=15.0.0` and `rxjs@>=7.0.0`.
 
@@ -33,10 +33,10 @@ bun install
 bun run build
 ```
 
-Run the React example:
+Run the Vue example:
 
 ```bash
-cd examples/react
+cd examples/vue
 bun install
 bun run dev
 ```

@@ -1,6 +1,6 @@
-# RxDB Debugger - React Example
+# RxDB Debugger - Vue Example
 
-A React + Vite app demonstrating [RxDB](https://rxdb.info/) with the `@rxdb-debugger/core` package and debugger UI, featuring a realistic music catalog database.
+A Vue 3 + Vite app demonstrating [RxDB](https://rxdb.info/) with the `@rxdb-debugger/core` package and debugger UI, featuring a realistic music catalog database.
 
 ## Features
 
@@ -61,7 +61,7 @@ bun run build
 ## Running the Example
 
 ```bash
-# Install dependencies (from examples/react)
+# Install dependencies (from examples/vue)
 bun install
 
 # Start the dev server
@@ -113,11 +113,14 @@ The DevTools explorer will show encryption/password metadata badges. The passwor
 ## Project Structure
 
 ```
-examples/react/
+examples/vue/
 ├── src/
-│   ├── main.tsx   # React entry point
-│   ├── App.tsx    # Demo UI with tabs, search, and debugger
-│   └── db.ts      # RxDB schemas, seed data, and database setup
+│   ├── main.ts              # Vue entry point
+│   ├── App.vue              # Demo shell, debugger dock, and navigation
+│   ├── composables/         # RxDB subscriptions and app state
+│   ├── views/               # Home, artists, albums, songs, playlists
+│   ├── components/          # Shared UI pieces
+│   └── db.ts                # RxDB schemas, seed data, and database setup
 ├── index.html
 ├── package.json
 ├── tsconfig.json
