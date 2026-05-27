@@ -1,5 +1,5 @@
 {
-  "name": "rxdb-debugger-react-example",
+  "name": "rxdb-debugger-vue-example",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -9,21 +9,18 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@base-ui/react": "^1.2.0",
     "@rxdb-debugger/core": "file:../../packages/core",
     "@rxdb-debugger/ui": "file:../../packages/ui",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
     "rxdb": "^16.21.1",
-    "rxjs": "^7.8.2"
+    "rxjs": "^7.8.2",
+    "vue": "^3.5.13"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.18",
-    "@types/react": "^18.3.18",
-    "@types/react-dom": "^18.3.5",
-    "@vitejs/plugin-react": "^4.3.4",
+    "@vitejs/plugin-vue": "^5.2.1",
     "tailwindcss": "^4.1.18",
     "typescript": "^5.7.3",
-    "vite": "^6.0.7"
+    "vite": "^6.0.7",
+    "vue-tsc": "^2.2.0"
   }
 }

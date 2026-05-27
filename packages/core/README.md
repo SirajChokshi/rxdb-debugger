@@ -548,13 +548,13 @@ onUnmounted(() => unmount?.());
 
 ## Example App
 
-A working React example is available in [`examples/react`](../../examples/react). It demonstrates:
+A working Vue example is available in [`examples/vue`](../../examples/vue). It demonstrates:
 
-- RxDB database setup with a `heroes` collection
-- Live document list with reactive subscriptions
-- Query demo with an age filter slider
+- RxDB music catalog with nine related collections
+- Live document lists with reactive subscriptions
+- Playlist management and friends activity sidebar
 - Event log showing change events
-- Mounted debugger UI
+- Mounted explorer debugger UI with mock replication
 
 To run the example:
 
@@ -563,7 +563,7 @@ To run the example:
 bun run build
 
 # Install and run the example
-cd examples/react
+cd examples/vue
 bun install
 bun run dev
 ```
