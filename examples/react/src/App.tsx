@@ -10,6 +10,8 @@ import {
   getDatabase,
   seedDatabase,
   setupMockReplications,
+  isMockReplicationOffline,
+  setMockReplicationOffline,
   formatDuration,
   formatPlayCount,
 } from "./db";
@@ -162,6 +164,8 @@ export default function App(): JSX.Element {
   const [isFriendsCollapsed, setIsFriendsCollapsed] = useState(() => {
     return localStorage.getItem("rxtunes-friends-collapsed") === "true";
   });
+  const [isReplicationOffline, setIsReplicationOffline] = useState(() => isMockReplicationOffline());
+  const [isReplicationToggling, setIsReplicationToggling] = useState(false);
 
   const [artists, setArtists] = useState<Artist[]>([]);
   const [albums, setAlbums] = useState<Album[]>([]);
@@ -235,7 +239,25 @@ export default function App(): JSX.Element {
   useEffect(() => {
     if (!db) return;
     setupMockReplications(db);
+    setIsReplicationOffline(isMockReplicationOffline());
   }, [db]);
+
+  const handleReplicationOfflineToggle = useCallback(async () => {
+    if (isReplicationToggling) return;
+
+    const nextOffline = !isReplicationOffline;
+    setIsReplicationToggling(true);
+    setIsReplicationOffline(nextOffline);
+
+    try {
+      await setMockReplicationOffline(nextOffline);
+    } catch (error) {
+      console.error("Failed to toggle replication offline state", error);
+      setIsReplicationOffline(isMockReplicationOffline());
+    } finally {
+      setIsReplicationToggling(false);
+    }
+  }, [isReplicationOffline, isReplicationToggling]);
 
   // Subscribe to events for the live counter
   useEffect(() => {
@@ -756,6 +778,11 @@ export default function App(): JSX.Element {
           </div>
 
           <div className="mt-auto flex flex-col gap-2">
+            <ReplicationOfflineControl
+              isOffline={isReplicationOffline}
+              isDisabled={!db || isReplicationToggling}
+              onToggle={() => { void handleReplicationOfflineToggle(); }}
+            />
             {!isSeeded ? (
               <button
                 onClick={handleSeed}
@@ -827,6 +854,7 @@ export default function App(): JSX.Element {
           <FriendsSidebar
             friendActivities={friendActivities}
             isCollapsed={isFriendsCollapsed}
+            isReplicationOffline={isReplicationOffline}
             onToggle={() => setIsFriendsCollapsed((prev) => !prev)}
           />
         </div>
@@ -1154,13 +1182,67 @@ function MediaAttributionFooter() {
   );
 }
 
+function ReplicationOfflineControl({
+  isOffline,
+  isDisabled,
+  onToggle,
+}: {
+  isOffline: boolean;
+  isDisabled: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div className="rounded-xl border border-neutral-800 bg-neutral-900/60 p-3 space-y-2">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold text-neutral-200">Sync</p>
+          <p className="text-[11px] leading-snug text-neutral-500 mt-0.5">
+            {isOffline
+              ? "Offline — replication paused and remote updates frozen."
+              : "Online — songs and users replicate with the mock remote."}
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={isOffline}
+          aria-label={isOffline ? "Go online" : "Go offline"}
+          disabled={isDisabled}
+          onClick={onToggle}
+          className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
+            isOffline ? "bg-amber-500/80" : "bg-green-500"
+          }`}
+        >
+          <span
+            className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+              isOffline ? "translate-x-6" : "translate-x-1"
+            }`}
+          />
+        </button>
+      </div>
+      <div className="flex items-center gap-2 text-[11px]">
+        <span
+          className={`inline-block h-2 w-2 rounded-full ${
+            isOffline ? "bg-amber-400" : "bg-green-400 animate-pulse"
+          }`}
+        />
+        <span className={isOffline ? "text-amber-300" : "text-green-300"}>
+          {isOffline ? "Offline mode" : "Live replication"}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function FriendsSidebar({
   friendActivities,
   isCollapsed,
+  isReplicationOffline,
   onToggle,
 }: {
   friendActivities: FriendActivity[];
   isCollapsed: boolean;
+  isReplicationOffline: boolean;
   onToggle: () => void;
 }) {
   return (
@@ -1183,6 +1265,12 @@ function FriendsSidebar({
           </div>
         )}
       </div>
+
+      {!isCollapsed && isReplicationOffline && (
+        <div className="mx-3 mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
+          Sync is offline. Friend activity will resume when you go back online.
+        </div>
+      )}
 
       {isCollapsed ? (
         <div className="flex flex-col items-center gap-2 pt-3">

@@ -119,11 +119,18 @@ interface MockRemoteUsersStore {
 }
 
 const REMOTE_SONGS_STORAGE_KEY = "rxdb-debugger-mock-remote-songs-v1";
-const SONGS_REPLICATION_IDENTIFIER = "mock-songs-sync";
+export const SONGS_REPLICATION_IDENTIFIER = "mock-songs-sync";
 const REMOTE_SONG_UPDATE_INTERVAL_MS = 8000;
 const REMOTE_USERS_STORAGE_KEY = "rxdb-debugger-mock-remote-users-v2";
-const USERS_REPLICATION_IDENTIFIER = "mock-users-sync";
+export const USERS_REPLICATION_IDENTIFIER = "mock-users-sync";
 const USERS_UPDATE_INTERVAL_MS = 30000;
+const REPLICATION_OFFLINE_STORAGE_KEY = "rxtunes-replication-offline";
+
+interface MockReplicationControl {
+  pause: () => Promise<void>;
+  start: () => Promise<void>;
+  reSync: () => void;
+}
 
 const songsPullStream$ = new Subject<MockPullStreamEvent>();
 const usersPullStream$ = new Subject<UsersPullStreamEvent>();
@@ -131,6 +138,84 @@ let songsSyncInterval: ReturnType<typeof setInterval> | null = null;
 let usersSyncInterval: ReturnType<typeof setInterval> | null = null;
 let songsReplicationStarted = false;
 let usersReplicationStarted = false;
+let songsReplicationState: MockReplicationControl | null = null;
+let usersReplicationState: MockReplicationControl | null = null;
+let mockReplicationOffline = readStoredReplicationOffline();
+
+function readStoredReplicationOffline(): boolean {
+  try {
+    return localStorage.getItem(REPLICATION_OFFLINE_STORAGE_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function persistReplicationOffline(offline: boolean): void {
+  try {
+    localStorage.setItem(REPLICATION_OFFLINE_STORAGE_KEY, offline.toString());
+  } catch {
+    // Ignore storage failures in restricted contexts.
+  }
+}
+
+function stopRemoteSyncIntervals(): void {
+  if (songsSyncInterval) {
+    clearInterval(songsSyncInterval);
+    songsSyncInterval = null;
+  }
+  if (usersSyncInterval) {
+    clearInterval(usersSyncInterval);
+    usersSyncInterval = null;
+  }
+}
+
+function startRemoteSyncIntervals(): void {
+  if (!mockReplicationOffline && songsReplicationStarted && !songsSyncInterval) {
+    songsSyncInterval = setInterval(runRemoteSongMutationTick, REMOTE_SONG_UPDATE_INTERVAL_MS);
+  }
+  if (!mockReplicationOffline && usersReplicationStarted && !usersSyncInterval) {
+    usersSyncInterval = setInterval(runRemoteUserMutationTick, USERS_UPDATE_INTERVAL_MS);
+  }
+}
+
+function getActiveReplicationStates(): MockReplicationControl[] {
+  return [songsReplicationState, usersReplicationState].filter(
+    (state): state is MockReplicationControl => state !== null,
+  );
+}
+
+export function isMockReplicationOffline(): boolean {
+  return mockReplicationOffline;
+}
+
+async function applyMockReplicationOfflineState(): Promise<void> {
+  const states = getActiveReplicationStates();
+  if (states.length === 0) {
+    return;
+  }
+
+  if (mockReplicationOffline) {
+    stopRemoteSyncIntervals();
+    await Promise.all(states.map((state) => state.pause()));
+    return;
+  }
+
+  startRemoteSyncIntervals();
+  await Promise.all(states.map((state) => state.start()));
+  for (const state of states) {
+    state.reSync();
+  }
+}
+
+export async function setMockReplicationOffline(offline: boolean): Promise<void> {
+  if (offline === mockReplicationOffline) {
+    return;
+  }
+
+  mockReplicationOffline = offline;
+  persistReplicationOffline(offline);
+  await applyMockReplicationOfflineState();
+}
 
 function compareSongsByCheckpoint(a: SongsCheckpoint, b: SongsCheckpoint): number {
   if (a.updatedAt !== b.updatedAt) {
@@ -486,7 +571,7 @@ export function setupMockSongsReplication(db: RxDatabase): void {
 
   songsReplicationStarted = true;
 
-  replicateRxCollection<MockSongDocData, SongsCheckpoint>({
+  songsReplicationState = replicateRxCollection<MockSongDocData, SongsCheckpoint>({
     collection: songsCollection as unknown as never,
     replicationIdentifier: SONGS_REPLICATION_IDENTIFIER,
     live: true,
@@ -547,10 +632,6 @@ export function setupMockSongsReplication(db: RxDatabase): void {
       stream$: songsPullStream$.asObservable(),
     },
   });
-
-  if (!songsSyncInterval) {
-    songsSyncInterval = setInterval(runRemoteSongMutationTick, REMOTE_SONG_UPDATE_INTERVAL_MS);
-  }
 }
 
 export function setupMockUsersReplication(db: RxDatabase): void {
@@ -565,7 +646,7 @@ export function setupMockUsersReplication(db: RxDatabase): void {
 
   usersReplicationStarted = true;
 
-  replicateRxCollection<MockUserDocData, UsersCheckpoint>({
+  usersReplicationState = replicateRxCollection<MockUserDocData, UsersCheckpoint>({
     collection: usersCollection as unknown as never,
     replicationIdentifier: USERS_REPLICATION_IDENTIFIER,
     live: true,
@@ -636,15 +717,12 @@ export function setupMockUsersReplication(db: RxDatabase): void {
       stream$: usersPullStream$.asObservable(),
     },
   });
-
-  if (!usersSyncInterval) {
-    usersSyncInterval = setInterval(runRemoteUserMutationTick, USERS_UPDATE_INTERVAL_MS);
-  }
 }
 
 export function setupMockReplications(db: RxDatabase): void {
   setupMockSongsReplication(db);
   setupMockUsersReplication(db);
+  void applyMockReplicationOfflineState();
 }
 
 function getRequiredCollection<T>(collection: RxCollection<T> | undefined, name: string): RxCollection<T> {
