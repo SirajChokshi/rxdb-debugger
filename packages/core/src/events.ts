@@ -129,11 +129,13 @@ function toChangeEvent(
   const operation = mapOperation(rxEvent.operation);
   const documentData = rxEvent.documentData as Record<string, unknown> | undefined;
   const previousDocumentData = rxEvent.previousDocumentData as Record<string, unknown> | undefined;
-  const eventWithEnd = rxEvent as { endTime?: number };
+  // Real RxDB events carry endTime; bridged remote events carry the original
+  // change timestamp instead (delivery is polled, so "now" would be late).
+  const eventWithTimes = rxEvent as { endTime?: number; timestamp?: number };
 
   return {
     id: generateEventId(),
-    timestamp: eventWithEnd.endTime ?? Date.now(),
+    timestamp: eventWithTimes.endTime ?? eventWithTimes.timestamp ?? Date.now(),
     collection: collectionName,
     documentId: rxEvent.documentId,
     operation,
