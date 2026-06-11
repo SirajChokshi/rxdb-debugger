@@ -1,5 +1,5 @@
 import { Observable, from } from "rxjs";
-import { debounceTime, filter, map, shareReplay, startWith, switchMap } from "rxjs/operators";
+import { debounceTime, filter, map, scan, shareReplay, startWith, switchMap } from "rxjs/operators";
 import { 
   evalInPage, 
   evalAsyncInPage, 
@@ -13,15 +13,22 @@ import {
  */
 const LIVE_REFETCH_DEBOUNCE_MS = 150;
 
+type LiveFetchResult<T> =
+  | { ok: true; value: T }
+  | { ok: false; error: unknown };
+
+type LiveStreamState<T> =
+  | { hasValue: false; shouldEmit: false }
+  | { hasValue: true; shouldEmit: boolean; value: T };
+
 /**
  * Build a live observable that fetches on subscribe and refetches whenever a
  * relevant change event arrives. Fetching happens lazily (no work until the
  * first subscriber) and stops when the last subscriber leaves (refCount).
  *
- * Failed fetches are dropped instead of erroring the stream: a refetch that
- * races a page navigation must neither kill the live stream nor surface as
- * an unhandled rejection. The previous value stays current and the next
- * change event retries.
+ * Initial fetch failures surface to subscribers so loading states can clear.
+ * Once a value has emitted, transient refetch failures are dropped and the
+ * latest value stays current until the next change event retries.
  */
 function createLiveStream<T>(
   changes$: Observable<unknown>,
@@ -34,12 +41,25 @@ function createLiveStream<T>(
       from(
         fetcher().then(
           (value) => ({ ok: true as const, value }),
-          () => ({ ok: false as const, value: undefined }),
+          (error) => ({ ok: false as const, error }),
         ),
       ),
     ),
-    filter((result): result is { ok: true; value: T } => result.ok),
-    map((result) => result.value),
+    scan<LiveFetchResult<T>, LiveStreamState<T>>((state, result) => {
+      if (result.ok) {
+        return { hasValue: true, shouldEmit: true, value: result.value };
+      }
+
+      if (!state.hasValue) {
+        throw result.error;
+      }
+
+      return { ...state, shouldEmit: false };
+    }, { hasValue: false, shouldEmit: false }),
+    filter((state): state is { hasValue: true; shouldEmit: true; value: T } =>
+      state.hasValue && state.shouldEmit
+    ),
+    map((state) => state.value),
     shareReplay({ bufferSize: 1, refCount: true }),
   );
 }

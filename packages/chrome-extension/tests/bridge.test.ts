@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import type { Observable } from "rxjs";
 import {
   BRIDGE_POLL_INTERVAL_MS,
   COLLECTION_POLL_INTERVAL_MS,
@@ -779,6 +780,40 @@ describe("remote database live observables", () => {
 
     expect(emissions).toHaveLength(2);
     expect(emissions[1]).toHaveLength(2);
+
+    subscription.unsubscribe();
+  });
+
+  test("query.$ surfaces initial fetch failures", async () => {
+    await initBridge("instance-1");
+    const remoteDb = await createRemoteDatabase("instance-1") as {
+      collections: Record<string, {
+        find(): { $: Observable<unknown[]> };
+      }>;
+    };
+    harness.heroes.find = () => ({
+      exec: async () => {
+        throw new Error("initial query failed");
+      },
+    });
+
+    const emissions: unknown[][] = [];
+    const errors: unknown[] = [];
+    const subscription = remoteDb.collections.heroes!.find().$.subscribe({
+      next: (docs) => {
+        emissions.push(docs);
+      },
+      error: (error) => {
+        errors.push(error);
+      },
+    });
+
+    await sleep(20);
+
+    expect(emissions).toEqual([]);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toBeInstanceOf(Error);
+    expect((errors[0] as Error).message).toContain("initial query failed");
 
     subscription.unsubscribe();
   });
