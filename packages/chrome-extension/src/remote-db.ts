@@ -304,9 +304,9 @@ export async function createRemoteDatabase(instanceId: string): Promise<unknown>
   const collections: Record<string, unknown> = {};
   const collectionsChanged$ = new Subject<string[]>();
 
-  const syncCollections = async (names?: string[]): Promise<void> => {
+  const syncCollections = async (): Promise<void> => {
     const colInfos = await fetchCollectionInfos(instanceId);
-    const nextNames = names ?? colInfos.map((entry) => entry.name).sort();
+    const nextNames = colInfos.map((entry) => entry.name).sort();
     const existingNames = new Set(Object.keys(collections));
 
     for (const colInfo of colInfos) {
@@ -330,9 +330,8 @@ export async function createRemoteDatabase(instanceId: string): Promise<unknown>
 
   getBridgeEvents().pipe(
     filter((event): event is BridgeEvent => event.type === "RXDB_COLLECTIONS_CHANGED"),
-    map((event) => (event.payload as string[] | undefined) ?? []),
-  ).subscribe((names) => {
-    void syncCollections(names);
+  ).subscribe(() => {
+    void syncCollections();
   });
 
   const remoteDb = {
