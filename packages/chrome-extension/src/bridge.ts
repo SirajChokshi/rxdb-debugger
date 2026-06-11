@@ -162,7 +162,6 @@ let bridgeInitialized = false;
 let pollIntervalId: ReturnType<typeof setInterval> | null = null;
 let activeSessionId: string | null = null;
 let activeInstanceId: string | null = null;
-let pollInFlight = false;
 
 /**
  * init/dispose are serialized through this chain so overlapping calls (rapid
@@ -489,13 +488,18 @@ function startPolling(sessionId: string, instanceId: string): void {
   }
   const sessionLiteral = JSON.stringify(sessionId);
   const subject = bridgeSubject;
+  // In-flight tracking is scoped to this poll loop. With a shared module
+  // flag, a slow eval from an already-disposed session would clear the flag
+  // in its finally handler while the new session's eval was still running,
+  // allowing two concurrent drains of the same page event queue.
+  const pollState = { inFlight: false };
 
   pollIntervalId = setInterval(() => {
     // A previous tick is still awaiting its eval; don't pile up.
-    if (pollInFlight || activeSessionId !== sessionId) {
+    if (pollState.inFlight || activeSessionId !== sessionId) {
       return;
     }
-    pollInFlight = true;
+    pollState.inFlight = true;
 
     evalInPage<BridgeEvent[] | null>(`
       (function() {
@@ -545,7 +549,7 @@ function startPolling(sessionId: string, instanceId: string): void {
         // Page may have navigated, ignore and retry on the next tick.
       })
       .finally(() => {
-        pollInFlight = false;
+        pollState.inFlight = false;
       });
   }, BRIDGE_POLL_INTERVAL_MS);
 }
@@ -555,7 +559,6 @@ async function disposeBridgeInternal(): Promise<void> {
     clearInterval(pollIntervalId);
     pollIntervalId = null;
   }
-  pollInFlight = false;
 
   const sessionId = activeSessionId;
   activeSessionId = null;

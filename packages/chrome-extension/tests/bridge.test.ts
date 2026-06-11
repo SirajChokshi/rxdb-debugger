@@ -661,6 +661,64 @@ describe("bridge communication protocol", () => {
     subscription.unsubscribe();
   });
 
+  test("a slow drain from a disposed session cannot unblock the new session's poll", async () => {
+    await initBridge("instance-1");
+
+    // Intercept only drain evals (identified by the queue-slice script) and
+    // defer their callbacks so the eval stays "in flight" under test control.
+    type EvalCallback = (
+      result?: unknown,
+      exceptionInfo?: chrome.devtools.inspectedWindow.EvaluationExceptionInfo,
+    ) => void;
+    const inspectedWindow = (globalThis as typeof globalThis & { chrome: typeof chrome })
+      .chrome.devtools.inspectedWindow as unknown as {
+      eval: (expression: string, callback: EvalCallback) => void;
+    };
+    const realEval = inspectedWindow.eval;
+    const pendingDrains: EvalCallback[] = [];
+    let drainCount = 0;
+    inspectedWindow.eval = (expression, callback) => {
+      if (expression.includes("state.eventQueue.slice")) {
+        drainCount += 1;
+        pendingDrains.push(callback);
+        return;
+      }
+      realEval(expression, callback);
+    };
+
+    // Session A starts a drain that stays in flight.
+    await harness.runIntervals(BRIDGE_POLL_INTERVAL_MS);
+    expect(drainCount).toBe(1);
+
+    // Session A is disposed while its drain is still pending; session B
+    // starts and begins its own drain.
+    await disposeBridge();
+    await initBridge("instance-1");
+    await harness.runIntervals(BRIDGE_POLL_INTERVAL_MS);
+    expect(drainCount).toBe(2);
+
+    // The stale session-A eval completes now. Its cleanup must only release
+    // its own in-flight tracking, not session B's.
+    pendingDrains.shift()!([], undefined);
+    await settle();
+
+    // B's drain is still in flight, so the next tick must not start a
+    // second concurrent drain against the same page event queue.
+    await harness.runIntervals(BRIDGE_POLL_INTERVAL_MS);
+    expect(drainCount).toBe(2);
+
+    // Once B's drain completes, polling resumes normally.
+    pendingDrains.shift()!([], undefined);
+    await settle();
+    await harness.runIntervals(BRIDGE_POLL_INTERVAL_MS);
+    expect(drainCount).toBe(3);
+
+    // Settle the leftover drain and restore the unintercepted eval so
+    // teardown evals run normally.
+    pendingDrains.shift()?.([], undefined);
+    inspectedWindow.eval = realEval;
+  });
+
   test("concurrent init and dispose calls are serialized safely", async () => {
     const first = initBridge("instance-1");
     const disposed = disposeBridge();
