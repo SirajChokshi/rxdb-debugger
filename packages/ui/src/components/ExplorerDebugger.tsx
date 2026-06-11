@@ -212,6 +212,12 @@ export function ExplorerDebugger(props: ExplorerDebuggerProps): JSX.Element {
   };
 
   const disconnectDebugger = async (): Promise<void> => {
+    // Invalidate any in-flight connect so it cannot proceed to mount an
+    // inspector for a connection that was just torn down. Every caller of
+    // disconnectDebugger also writes coherent UI state afterwards (status
+    // and/or activeInstanceId), so a connect that bails on a stale
+    // generation never leaves its optimistic writes dangling.
+    connectGeneration += 1;
     if (debuggerCleanup) {
       debuggerCleanup();
       debuggerCleanup = null;
@@ -244,11 +250,13 @@ export function ExplorerDebugger(props: ExplorerDebuggerProps): JSX.Element {
   };
 
   const connectToInstance = async (instanceId: string): Promise<void> => {
-    const generation = ++connectGeneration;
     setStatus("loading");
 
+    // disconnectDebugger bumps connectGeneration, so claim ours afterwards.
+    // The last claimer wins; superseded attempts bail at the checks below and
+    // rely on the superseder to write the final UI state.
     await disconnectDebugger();
-    if (generation !== connectGeneration) return;
+    const generation = ++connectGeneration;
 
     try {
       const debuggerDbInput = await withTimeout(
