@@ -173,6 +173,7 @@ export function ExplorerDebugger(props: ExplorerDebuggerProps): JSX.Element {
   let debuggerContainerRef: HTMLDivElement | undefined;
   let debuggerCleanup: (() => void) | null = null;
   let connectGeneration = 0;
+  let readyConnectGeneration = 0;
   let loadingWatchdogId: number | undefined;
   let refreshRunning = false;
   let refreshQueued = false;
@@ -216,6 +217,7 @@ export function ExplorerDebugger(props: ExplorerDebuggerProps): JSX.Element {
       debuggerCleanup();
       debuggerCleanup = null;
     }
+    readyConnectGeneration = 0;
     setActiveInstanceId(null);
     if (props.adapter.disconnect) {
       await props.adapter.disconnect();
@@ -259,12 +261,24 @@ export function ExplorerDebugger(props: ExplorerDebuggerProps): JSX.Element {
       if (generation !== connectGeneration) return;
 
       setActiveInstanceId(instanceId);
+      readyConnectGeneration = generation;
       setStatus("ready");
       const container = await waitForDebuggerContainer(() => debuggerContainerRef);
       // A newer connect/cleanup may have started while waiting for the
       // container; mounting now would create a second orphaned debugger root
       // and leak the one whose cleanup handle we'd overwrite.
-      if (generation !== connectGeneration) return;
+      if (generation !== connectGeneration) {
+        if (
+          readyConnectGeneration === generation
+          && status() === "ready"
+          && activeInstanceId() === instanceId
+        ) {
+          readyConnectGeneration = 0;
+          setActiveInstanceId(null);
+          setStatus("loading");
+        }
+        return;
+      }
 
       debuggerCleanup = mountDebugger({
         container,

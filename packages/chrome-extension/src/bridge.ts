@@ -545,7 +545,9 @@ function startPolling(sessionId: string, instanceId: string): void {
         // Page may have navigated, ignore and retry on the next tick.
       })
       .finally(() => {
-        pollInFlight = false;
+        if (activeSessionId === sessionId) {
+          pollInFlight = false;
+        }
       });
   }, BRIDGE_POLL_INTERVAL_MS);
 }
