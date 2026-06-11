@@ -1,4 +1,5 @@
-import { createEffect, createSignal, createMemo, For, onCleanup, Show } from "solid-js";
+import { createEffect, createSignal, For, onCleanup, Show } from "solid-js";
+import { of } from "rxjs";
 import type { RxdbDebugger, DiffResult, DocumentResult, SchemaDetails, DocumentVersion } from "@rxdb-debugger/core";
 import { Table, type TableColumn } from "../shared/Table.js";
 import type { Theme } from "../../styles/theme.js";
@@ -65,26 +66,30 @@ export function DocumentsPanel(props: DocumentsPanelProps) {
     });
   });
 
-  const liveDocuments = createMemo(() => {
-    const collection = selectedCollection();
-    if (!collection) return null;
-    return createObservableSignal(
-      () => props.debugger.documents.list(collection, { limit: PAGE_SIZE, live: true }).observe(),
-      {
-        initialValue: [] as DocumentResult[],
-        onError: (err) => setError(err instanceof Error ? err.message : "Failed to load documents"),
+  const liveDocuments = createObservableSignal(
+    () => {
+      const collection = selectedCollection();
+      if (!collection) {
+        return of([] as DocumentResult[]);
       }
-    );
-  });
+      return props.debugger.documents.list(collection, { limit: PAGE_SIZE, live: true }).observe();
+    },
+    {
+      initialValue: [] as DocumentResult[],
+      onError: (err) => setError(err instanceof Error ? err.message : "Failed to load documents"),
+    }
+  );
 
-  const liveCount = createMemo(() => {
-    const collection = selectedCollection();
-    if (!collection) return null;
-    return createObservableSignal(
-      () => props.debugger.documents.count(collection, { live: true }).observe(),
-      { initialValue: 0 }
-    );
-  });
+  const liveCount = createObservableSignal(
+    () => {
+      const collection = selectedCollection();
+      if (!collection) {
+        return of(0);
+      }
+      return props.debugger.documents.count(collection, { live: true }).observe();
+    },
+    { initialValue: 0 }
+  );
 
   createEffect(() => {
     const collection = selectedCollection();
@@ -98,19 +103,25 @@ export function DocumentsPanel(props: DocumentsPanelProps) {
   });
 
   createEffect(() => {
-    const docsAccessor = liveDocuments();
-    if (docsAccessor) {
-      const docs = docsAccessor();
-      setDocuments(docs);
+    const collection = selectedCollection();
+    if (!collection) {
+      setDocuments([]);
       setIsLoading(false);
+      return;
     }
+
+    setDocuments(liveDocuments());
+    setIsLoading(false);
   });
 
   createEffect(() => {
-    const countAccessor = liveCount();
-    if (countAccessor) {
-      setTotalCount(countAccessor());
+    const collection = selectedCollection();
+    if (!collection) {
+      setTotalCount(0);
+      return;
     }
+
+    setTotalCount(liveCount());
   });
 
   createEffect(() => {

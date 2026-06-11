@@ -215,6 +215,24 @@ afterEach(async () => {
 });
 
 describe("bridge communication protocol", () => {
+  test("drains queued events immediately after bridge initialization", async () => {
+    const events: BridgeEvent[] = [];
+    const subscription = getBridgeEvents().subscribe((event) => {
+      events.push(event);
+    });
+
+    await initBridge("instance-1");
+
+    expect(events).toEqual([
+      {
+        type: "RXDB_COLLECTIONS_CHANGED",
+        payload: ["heroes", "villains"],
+      },
+    ]);
+
+    subscription.unsubscribe();
+  });
+
   test("drains queued page bridge events from the inspected RxDB instance", async () => {
     const events: BridgeEvent[] = [];
     const subscription = getBridgeEvents().subscribe((event) => {
@@ -319,6 +337,40 @@ describe("bridge communication protocol", () => {
     await harness.runIntervals(HEARTBEAT_INTERVAL_MS);
 
     expect(events).toHaveLength(1);
+    subscription.unsubscribe();
+  });
+
+  test("reinitializes the bridge when connecting to a different instance", async () => {
+    harness.page.__RXDB_DEBUGGER__ = {
+      getInstanceHandle(instanceId: string) {
+        if (instanceId === "instance-1") {
+          return harness.db;
+        }
+        if (instanceId === "instance-2") {
+          return {
+            token: "db-token-2",
+            collections: { sidekicks: createFakeCollection() },
+          };
+        }
+        return null;
+      },
+    };
+
+    await initBridge("instance-1");
+    await disposeBridge();
+
+    const events: BridgeEvent[] = [];
+    const subscription = getBridgeEvents().subscribe((event) => {
+      events.push(event);
+    });
+
+    await initBridge("instance-2");
+
+    expect(events.at(-1)).toEqual({
+      type: "RXDB_COLLECTIONS_CHANGED",
+      payload: ["sidekicks"],
+    });
+
     subscription.unsubscribe();
   });
 

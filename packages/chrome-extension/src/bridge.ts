@@ -105,6 +105,7 @@ let bridgeSubject: ReplaySubject<BridgeEvent> | null = null;
 let bridgeInitialized = false;
 let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
 let activeSessionId: string | null = null;
+let activeBridgeInstanceId: string | null = null;
 
 function createSessionId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -146,13 +147,50 @@ export function getCollectionChanges(collectionName: string): Observable<ChangeE
   );
 }
 
+function publishBridgeEvents(events: unknown): void {
+  if (!Array.isArray(events)) {
+    return;
+  }
+
+  for (const event of events) {
+    if (isBridgeEvent(event)) {
+      bridgeSubject?.next(event);
+    }
+  }
+}
+
+async function drainBridgeEvents(sessionId: string): Promise<void> {
+  const sessionLiteral = JSON.stringify(sessionId);
+  const events = await evalInPage<unknown>(`
+    (function() {
+      var state = window.__rxdb_debugger_bridge_state;
+      if (!state || state.sessionId !== ${sessionLiteral}) return [];
+      state.heartbeat = Date.now();
+      if (!Array.isArray(state.eventQueue) || state.eventQueue.length === 0) return [];
+      var events = state.eventQueue.slice();
+      state.eventQueue.length = 0;
+      return events;
+    })();
+  `);
+
+  publishBridgeEvents(events);
+}
+
 /**
  * Initialize the event bridge.
  * Injects a page-side bridge and polls its event queue from the DevTools panel.
  */
 export async function initBridge(instanceId: string): Promise<void> {
-  if (bridgeInitialized) return;
+  if (bridgeInitialized && activeBridgeInstanceId === instanceId) {
+    return;
+  }
+
+  if (bridgeInitialized) {
+    await disposeBridge();
+  }
+
   bridgeInitialized = true;
+  activeBridgeInstanceId = instanceId;
 
   if (!bridgeSubject) {
     bridgeSubject = new ReplaySubject<BridgeEvent>(1);
@@ -165,10 +203,16 @@ export async function initBridge(instanceId: string): Promise<void> {
     // Inject the page-context bridge
     await injectPageBridge(sessionId, instanceId);
 
+    // Drain any events queued during injection before waiting for heartbeat.
+    await drainBridgeEvents(sessionId).catch(() => {
+      // Page may have navigated, ignore
+    });
+
     // Start heartbeat to keep page bridge alive
     startHeartbeat(sessionId);
   } catch (error) {
     activeSessionId = null;
+    activeBridgeInstanceId = null;
     bridgeInitialized = false;
     throw error;
   }
@@ -340,30 +384,9 @@ function startHeartbeat(sessionId: string): void {
   const sessionLiteral = JSON.stringify(sessionId);
 
   heartbeatInterval = setInterval(() => {
-    evalInPage(`
-      (function() {
-        var state = window.__rxdb_debugger_bridge_state;
-        if (!state || state.sessionId !== ${sessionLiteral}) return [];
-        state.heartbeat = Date.now();
-        if (!Array.isArray(state.eventQueue) || state.eventQueue.length === 0) return [];
-        var events = state.eventQueue.slice();
-        state.eventQueue.length = 0;
-        return events;
-      })();
-    `)
-      .then((events) => {
-        if (!Array.isArray(events)) {
-          return;
-        }
-        for (const event of events) {
-          if (isBridgeEvent(event)) {
-            bridgeSubject?.next(event);
-          }
-        }
-      })
-      .catch(() => {
+    drainBridgeEvents(sessionId).catch(() => {
       // Page may have navigated, ignore
-      });
+    });
   }, HEARTBEAT_INTERVAL_MS);
 }
 
@@ -378,6 +401,7 @@ export async function disposeBridge(): Promise<void> {
 
   const sessionId = activeSessionId;
   activeSessionId = null;
+  activeBridgeInstanceId = null;
 
   bridgeSubject?.complete();
   bridgeSubject = null;
