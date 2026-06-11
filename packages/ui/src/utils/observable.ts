@@ -1,4 +1,4 @@
-import { from } from "solid-js";
+import { createEffect, createSignal, from, onCleanup } from "solid-js";
 import type { Observable, Subscription } from "rxjs";
 import type { Accessor } from "solid-js";
 import type { ExplorerQuery } from "@rxdb-debugger/core";
@@ -103,15 +103,17 @@ export function createObservableSignal<T>(
   options: FromObservableOptions<T>
 ): Accessor<T> {
   const { initialValue, onError } = options;
+  const [value, setValue] = createSignal<T>(initialValue);
 
-  return from<T>((set) => {
-    set(() => initialValue);
+  createEffect(() => {
+    setValue(() => initialValue);
+
     let subscription: Subscription | null = null;
 
     try {
       const observable$ = getObservable();
       subscription = observable$.subscribe({
-        next: (value) => set(() => value),
+        next: (nextValue) => setValue(() => nextValue),
         error: (err) => {
           if (onError) {
             onError(err);
@@ -128,8 +130,10 @@ export function createObservableSignal<T>(
       }
     }
 
-    return () => {
+    onCleanup(() => {
       subscription?.unsubscribe();
-    };
-  }) as Accessor<T>;
+    });
+  });
+
+  return value;
 }

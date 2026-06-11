@@ -1,6 +1,7 @@
 import type { RxCollection, RxDatabase, RxJsonSchema } from "rxdb/plugins/core";
 import { combineLatest, Observable, of } from "rxjs";
-import { map } from "rxjs/operators";
+import { map, startWith, switchMap } from "rxjs/operators";
+import { getDebuggerDatabaseExtensions } from "./database-extensions.js";
 import { createAsyncObservable, createQuery, type ExplorerQuery, type LiveOptions } from "./query.js";
 
 /**
@@ -113,6 +114,20 @@ function createAllCollectionsObservable(
   );
 }
 
+function createDynamicCollectionsObservable(
+  db: RxDatabase,
+): Observable<CollectionInfo[]> {
+  const extensions = getDebuggerDatabaseExtensions(db);
+  if (!extensions?.onCollectionsChanged) {
+    return createAllCollectionsObservable(db);
+  }
+
+  return extensions.onCollectionsChanged.pipe(
+    startWith(Object.keys(db.collections).sort()),
+    switchMap(() => createAllCollectionsObservable(db)),
+  );
+}
+
 /**
  * Create the catalog service for a database.
  */
@@ -122,7 +137,7 @@ export function createCatalogService(
   return {
     collections(options: LiveOptions = {}): ExplorerQuery<CollectionInfo[]> {
       const source$ = createAsyncObservable(async () =>
-        createAllCollectionsObservable(await getDb())
+        createDynamicCollectionsObservable(await getDb())
       );
 
       return createQuery(source$, options);

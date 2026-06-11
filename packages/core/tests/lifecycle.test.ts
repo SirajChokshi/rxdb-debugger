@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { REPLICATION_STATE_BY_COLLECTION } from "rxdb/plugins/replication";
+import { attachDebuggerDatabaseExtensions } from "../src/database-extensions";
 import { config, Observable, Subject } from "rxjs";
 import { createDocumentsService } from "../src/documents";
 import { createEventsService, type ChangeEvent, type EventsService } from "../src/events";
@@ -347,6 +348,71 @@ describe("core observable lifecycle", () => {
     } finally {
       config.onStoppedNotification = previousHandler;
     }
+  });
+
+  test("resubscribes to collection change streams when the collection set changes", async () => {
+    const collectionsChanged$ = new Subject<string[]>();
+    const heroesEvents$ = new Subject<unknown>();
+    const villainsEvents$ = new Subject<unknown>();
+    let heroesSubscribeCount = 0;
+    let villainsSubscribeCount = 0;
+
+    const db = {
+      collections: {
+        heroes: {
+          $: new Observable<unknown>((subscriber) => {
+            heroesSubscribeCount += 1;
+            return heroesEvents$.subscribe(subscriber);
+          }),
+        },
+      },
+    };
+
+    attachDebuggerDatabaseExtensions(db as never, {
+      onCollectionsChanged: collectionsChanged$.asObservable(),
+    });
+
+    const service = createEventsService(async () => db as never);
+    const receivedEvents: ChangeEvent[] = [];
+    const subscription = service.stream().observe().subscribe((event) => {
+      receivedEvents.push(event);
+    });
+
+    await flushMicrotasks();
+
+    heroesEvents$.next({
+      operation: "INSERT",
+      documentId: "hero-1",
+      documentData: { id: "hero-1" },
+    });
+
+    db.collections.villains = {
+      $: new Observable<unknown>((subscriber) => {
+        villainsSubscribeCount += 1;
+        return villainsEvents$.subscribe(subscriber);
+      }),
+    };
+
+    collectionsChanged$.next(["heroes", "villains"]);
+    await flushMicrotasks();
+
+    villainsEvents$.next({
+      operation: "INSERT",
+      documentId: "villain-1",
+      documentData: { id: "villain-1" },
+    });
+
+    expect(heroesSubscribeCount).toBe(1);
+    expect(villainsSubscribeCount).toBe(1);
+    expect(receivedEvents).toHaveLength(2);
+    expect(receivedEvents[1]).toMatchObject({
+      collection: "villains",
+      operation: "INSERT",
+      documentId: "villain-1",
+    });
+
+    subscription.unsubscribe();
+    service.dispose();
   });
 
   test("starts history tracking lazily and disposes its stream subscription", async () => {

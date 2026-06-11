@@ -6,6 +6,12 @@
  */
 
 export {
+  attachDebuggerDatabaseExtensions,
+  getDebuggerDatabaseExtensions,
+  type DebuggerDatabaseExtensions,
+} from "./database-extensions.js";
+
+export {
   type CatalogService,
   type CollectionInfo,
   createCatalogService,

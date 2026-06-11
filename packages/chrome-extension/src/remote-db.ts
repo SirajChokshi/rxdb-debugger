@@ -1,10 +1,12 @@
-import { Observable, from, startWith, scan, map } from "rxjs";
-import { shareReplay } from "rxjs/operators";
-import { 
-  evalInPage, 
-  evalAsyncInPage, 
-  getCollectionChanges, 
+import { attachDebuggerDatabaseExtensions } from "@rxdb-debugger/core";
+import { Observable, Subject, from, merge, of, startWith, scan, map } from "rxjs";
+import { filter, shareReplay, switchMap } from "rxjs/operators";
+import {
+  evalInPage,
+  evalAsyncInPage,
+  getCollectionChanges,
   getBridgeEvents,
+  type BridgeEvent,
 } from "./bridge.js";
 
 interface RemoteCollectionSchema {
@@ -174,6 +176,77 @@ export async function removeRemoteDatabaseInstance(instanceId: string): Promise<
   `);
 }
 
+function createLiveQueryObservable<T>(
+  fetchValue: () => Promise<T>,
+  collectionName: string,
+): Observable<T> {
+  const refresh$ = merge(
+    of(null),
+    getBridgeEvents().pipe(
+      filter(
+        (event): event is BridgeEvent =>
+          event.type === "RXDB_CHANGE"
+          || event.type === "RXDB_COLLECTIONS_CHANGED"
+          || event.type === "RXDB_DESTROYED",
+      ),
+      filter((event) => {
+        if (event.type === "RXDB_CHANGE") {
+          return (event.payload as { collection?: string })?.collection === collectionName;
+        }
+        return true;
+      }),
+      map(() => null),
+    ),
+  );
+
+  return refresh$.pipe(
+    switchMap(() => from(fetchValue())),
+    shareReplay({ bufferSize: 1, refCount: true }),
+  );
+}
+
+async function fetchCollectionInfos(
+  instanceId: string,
+): Promise<RemoteCollectionInfo[]> {
+  const instanceIdLiteral = JSON.stringify(instanceId);
+  return evalAsyncInPage<RemoteCollectionInfo[]>(`
+    (async function() {
+      const registry = window.__RXDB_DEBUGGER__;
+      if (!registry || typeof registry.getInstanceHandle !== "function") {
+        return [];
+      }
+      const db = registry.getInstanceHandle(${instanceIdLiteral});
+      if (!db) return [];
+
+      const collections = [];
+      for (const [name, col] of Object.entries(db.collections || {})) {
+        const schema = col.schema?.jsonSchema || {};
+        const primaryPath = typeof schema.primaryKey === 'string'
+          ? schema.primaryKey
+          : (schema.primaryKey?.key || 'id');
+
+        let count = 0;
+        try {
+          count = await col.count().exec();
+        } catch (e) {}
+
+        collections.push({
+          name,
+          schema: {
+            primaryPath,
+            version: schema.version || 0,
+            indexes: schema.indexes || [],
+            jsonSchema: schema
+          },
+          count
+        });
+      }
+
+      return collections;
+    })()
+  `);
+}
+
 /**
  * Creates a remote database proxy that forwards all calls to the page via eval().
  */
@@ -229,17 +302,52 @@ export async function createRemoteDatabase(instanceId: string): Promise<unknown>
   }
 
   const collections: Record<string, unknown> = {};
+  const collectionsChanged$ = new Subject<string[]>();
+
+  const syncCollections = async (names?: string[]): Promise<void> => {
+    const colInfos = await fetchCollectionInfos(instanceId);
+    const nextNames = names ?? colInfos.map((entry) => entry.name).sort();
+    const existingNames = new Set(Object.keys(collections));
+
+    for (const colInfo of colInfos) {
+      if (!existingNames.has(colInfo.name)) {
+        collections[colInfo.name] = createRemoteCollection(instanceId, colInfo);
+      }
+    }
+
+    for (const name of existingNames) {
+      if (!nextNames.includes(name)) {
+        delete collections[name];
+      }
+    }
+
+    collectionsChanged$.next(nextNames);
+  };
+
   for (const colInfo of dbInfo.collections) {
     collections[colInfo.name] = createRemoteCollection(instanceId, colInfo);
   }
 
-  return {
+  getBridgeEvents().pipe(
+    filter((event): event is BridgeEvent => event.type === "RXDB_COLLECTIONS_CHANGED"),
+    map((event) => (event.payload as string[] | undefined) ?? []),
+  ).subscribe((names) => {
+    void syncCollections(names);
+  });
+
+  const remoteDb = {
     name: dbInfo.name,
     instanceId: dbInfo.instanceId,
     logicalDatabaseId: dbInfo.logicalDatabaseId,
     collections,
     $: getBridgeEvents(),
   };
+
+  attachDebuggerDatabaseExtensions(remoteDb as never, {
+    onCollectionsChanged: collectionsChanged$.asObservable(),
+  });
+
+  return remoteDb;
 }
 
 function createRemoteCollection(instanceId: string, info: RemoteCollectionInfo) {
@@ -265,7 +373,7 @@ function createRemoteCollection(instanceId: string, info: RemoteCollectionInfo) 
     map((event) => (event.operation === "INSERT" ? 1 : event.operation === "DELETE" ? -1 : 0)),
     scan((acc, delta) => Math.max(0, acc + delta), initialCount),
     startWith(initialCount),
-    shareReplay(1)
+    shareReplay({ bufferSize: 1, refCount: true }),
   );
 
   return {
@@ -345,7 +453,7 @@ function createRemoteQuery(
     },
     exec: fetchDocs,
     get $(): Observable<unknown[]> {
-      return from(fetchDocs()).pipe(shareReplay(1));
+      return createLiveQueryObservable(fetchDocs, collectionName);
     },
   };
 
@@ -381,7 +489,7 @@ function createRemoteFindOne(
   return {
     exec: fetchDoc,
     get $(): Observable<unknown | null> {
-      return from(fetchDoc()).pipe(shareReplay(1));
+      return createLiveQueryObservable(fetchDoc, collectionName);
     },
   };
 }

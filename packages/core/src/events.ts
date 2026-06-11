@@ -1,6 +1,7 @@
 import type { RxChangeEvent, RxCollection, RxDatabase } from "rxdb/plugins/core";
 import { Observable, Subject, BehaviorSubject } from "rxjs";
 import { filter, map, take, takeUntil } from "rxjs/operators";
+import { getDebuggerDatabaseExtensions } from "./database-extensions.js";
 import { createStaticQuery, type ExplorerQuery } from "./query.js";
 import { SharedAsyncInitializer } from "./shared-lifecycle.js";
 
@@ -155,7 +156,53 @@ export function createEventsService(
   const eventSubject = new Subject<ChangeEvent>();
 
   const lifecycle = new SharedAsyncInitializer();
-  let subscriptions: { unsubscribe: () => void }[] = [];
+  let collectionSubscriptions: { unsubscribe: () => void }[] = [];
+  let extensionSubscriptions: { unsubscribe: () => void }[] = [];
+  let watchedCollectionKey = "";
+
+  const clearCollectionSubscriptions = (): void => {
+    for (const sub of collectionSubscriptions) {
+      sub.unsubscribe();
+    }
+    collectionSubscriptions = [];
+  };
+
+  const clearExtensionSubscriptions = (): void => {
+    for (const sub of extensionSubscriptions) {
+      sub.unsubscribe();
+    }
+    extensionSubscriptions = [];
+  };
+
+  const subscribeToCollections = (db: RxDatabase, shouldContinue: () => boolean): void => {
+    const nextKey = Object.keys(db.collections).sort().join(",");
+    if (nextKey === watchedCollectionKey) {
+      return;
+    }
+
+    clearCollectionSubscriptions();
+    watchedCollectionKey = nextKey;
+
+    if (!shouldContinue()) {
+      return;
+    }
+
+    for (const [name, collection] of Object.entries(db.collections)) {
+      const col = collection as RxCollection;
+      const sub = col.$.pipe(
+        takeUntil(destroy$),
+        filter(() => !paused$.value),
+        map((event) => toChangeEvent(event, name)),
+      ).subscribe((event) => {
+        eventBuffer.push(event);
+        while (eventBuffer.length > bufferSize) {
+          eventBuffer.shift();
+        }
+        eventSubject.next(event);
+      });
+      collectionSubscriptions.push(sub);
+    }
+  };
 
   const initialize = async (force = false): Promise<void> => {
     await lifecycle.ensureStarted(async ({ shouldContinue }) => {
@@ -164,20 +211,19 @@ export function createEventsService(
         return;
       }
 
-      for (const [name, collection] of Object.entries(db.collections)) {
-        const col = collection as RxCollection;
-        const sub = col.$.pipe(
-          takeUntil(destroy$),
-          filter(() => !paused$.value),
-          map((event) => toChangeEvent(event, name)),
-        ).subscribe((event) => {
-          eventBuffer.push(event);
-          while (eventBuffer.length > bufferSize) {
-            eventBuffer.shift();
-          }
-          eventSubject.next(event);
-        });
-        subscriptions.push(sub);
+      subscribeToCollections(db, shouldContinue);
+
+      const extensions = getDebuggerDatabaseExtensions(db);
+      if (extensions?.onCollectionsChanged) {
+        const collectionsChangedSub = extensions.onCollectionsChanged
+          .pipe(takeUntil(destroy$))
+          .subscribe(() => {
+            if (!shouldContinue()) {
+              return;
+            }
+            subscribeToCollections(db, shouldContinue);
+          });
+        extensionSubscriptions.push(collectionsChangedSub);
       }
 
     }, { force });
@@ -286,10 +332,9 @@ export function createEventsService(
         destroy$.complete();
         paused$.complete();
         eventSubject.complete();
-        for (const sub of subscriptions) {
-          sub.unsubscribe();
-        }
-        subscriptions = [];
+        watchedCollectionKey = "";
+        clearCollectionSubscriptions();
+        clearExtensionSubscriptions();
       });
     },
   };
