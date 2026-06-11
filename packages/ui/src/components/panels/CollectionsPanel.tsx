@@ -1,5 +1,5 @@
 import { createEffect, createSignal, For, onCleanup, Show } from "solid-js";
-import type { RxdbDebugger, PropertyInfo, SchemaDetails, Relationship } from "@rxdb-debugger/core";
+import type { RxdbDebugger, CollectionInfo, PropertyInfo, SchemaDetails, Relationship } from "@rxdb-debugger/core";
 import type { Theme } from "../../styles/theme.js";
 import { fromExplorerQuery } from "../../utils/observable.js";
 import { Resizable } from "../shared/Resizable.js";
@@ -123,20 +123,24 @@ export function CollectionsPanel(props: CollectionsPanelProps) {
   const [isMobile, setIsMobile] = createSignal(false);
   const [searchQuery, setSearchQuery] = createSignal("");
 
+  // null = first emission pending. An empty array is a valid loaded state
+  // (database without collections); treating it as "loading" made empty
+  // databases show a spinner forever.
   const collections = fromExplorerQuery(
     props.debugger.catalog.collections({ live: true }),
     {
-      initialValue: [],
+      initialValue: null as CollectionInfo[] | null,
       onError: (err) => setError(err instanceof Error ? err.message : "Failed to load collections"),
     }
   );
 
-  const isLoading = () => collections().length === 0 && !error();
+  const loadedCollections = () => collections() ?? [];
+  const isLoading = () => collections() === null && !error();
 
   const filteredCollections = () => {
     const q = searchQuery().toLowerCase();
-    if (!q) return collections();
-    return collections().filter(c => c.name.toLowerCase().includes(q));
+    if (!q) return loadedCollections();
+    return loadedCollections().filter(c => c.name.toLowerCase().includes(q));
   };
 
   createEffect(() => {
@@ -198,10 +202,10 @@ export function CollectionsPanel(props: CollectionsPanelProps) {
         <Show when={error()}>
           <div class="p-[var(--spacing-md)] text-error bg-error/10">{error()}</div>
         </Show>
-        <Show when={!isLoading() && !error() && collections().length === 0}>
+        <Show when={!isLoading() && !error() && loadedCollections().length === 0}>
           <div class="p-[var(--spacing-md)] text-text-muted text-center">No collections found</div>
         </Show>
-        <Show when={!isLoading() && !error() && collections().length > 0 && filteredCollections().length === 0}>
+        <Show when={!isLoading() && !error() && loadedCollections().length > 0 && filteredCollections().length === 0}>
           <div class="p-[var(--spacing-md)] text-text-muted text-center">No matching collections</div>
         </Show>
         <For each={filteredCollections()}>

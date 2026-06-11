@@ -22,6 +22,13 @@ export interface ExplorerDebuggerAdapter {
   disconnect?(): Promise<void>;
   closeInstance(instanceId: string): Promise<boolean>;
   removeInstance(instanceId: string): Promise<boolean>;
+  /**
+   * Optional: subscribe to inventory-level changes in the inspected page
+   * (databases created/destroyed, collection sets changed). The explorer
+   * refreshes its database list when the listener fires.
+   * Returns an unsubscribe function.
+   */
+  onInventoryChange?(listener: () => void): () => void;
 }
 
 export interface ExplorerLogicalDatabase {
@@ -167,6 +174,9 @@ export function ExplorerDebugger(props: ExplorerDebuggerProps): JSX.Element {
   let debuggerCleanup: (() => void) | null = null;
   let connectGeneration = 0;
   let loadingWatchdogId: number | undefined;
+  let refreshRunning = false;
+  let refreshQueued = false;
+  let inventoryRefreshTimer: number | undefined;
 
   const isEmpty = createMemo(() => status() === "empty");
 
@@ -251,6 +261,10 @@ export function ExplorerDebugger(props: ExplorerDebuggerProps): JSX.Element {
       setActiveInstanceId(instanceId);
       setStatus("ready");
       const container = await waitForDebuggerContainer(() => debuggerContainerRef);
+      // A newer connect/cleanup may have started while waiting for the
+      // container; mounting now would create a second orphaned debugger root
+      // and leak the one whose cleanup handle we'd overwrite.
+      if (generation !== connectGeneration) return;
 
       debuggerCleanup = mountDebugger({
         container,
@@ -270,7 +284,32 @@ export function ExplorerDebugger(props: ExplorerDebuggerProps): JSX.Element {
   };
 
   const refreshInventory = async (preserveSelection: boolean): Promise<void> => {
-    setStatus("loading");
+    // Coalesce overlapping refreshes (manual button + inventory events):
+    // queue at most one follow-up run instead of racing two loops.
+    if (refreshRunning) {
+      refreshQueued = true;
+      return;
+    }
+    refreshRunning = true;
+    try {
+      await runInventoryRefresh(preserveSelection);
+    } finally {
+      refreshRunning = false;
+      if (refreshQueued) {
+        refreshQueued = false;
+        void refreshInventory(true);
+      }
+    }
+  };
+
+  const runInventoryRefresh = async (preserveSelection: boolean): Promise<void> => {
+    // Keep the current view mounted during a background refresh. Tearing the
+    // ready view down would dispose the container that the inspector is
+    // mounted into and leave a blank panel when the same instance stays
+    // connected.
+    if (status() !== "ready") {
+      setStatus("loading");
+    }
 
     try {
       const hasRegistry = await withTimeout(
@@ -298,6 +337,12 @@ export function ExplorerDebugger(props: ExplorerDebuggerProps): JSX.Element {
         props.adapter.listInstances(),
         6000,
         "Timed out while loading database instances",
+      );
+
+      // Snapshot what we knew about the connected instance before the lists
+      // are replaced, so collection-set changes can be detected below.
+      const previousActiveEntry = instances().find(
+        (entry) => entry.id === activeInstanceId(),
       );
 
       setLogicalDatabases(nextLogicalDatabases);
@@ -334,7 +379,17 @@ export function ExplorerDebugger(props: ExplorerDebuggerProps): JSX.Element {
         return;
       }
 
-      if (activeInstanceId() !== nextInstanceId) {
+      // Reconnect when the instance changed, or when the connected instance's
+      // collection set changed: the inspector holds a snapshot of the
+      // collections from connect time and must be rebuilt to see new ones.
+      const nextActiveEntry = nextInstances.find((entry) => entry.id === nextInstanceId);
+      const collectionSetChanged =
+        activeInstanceId() === nextInstanceId
+        && previousActiveEntry !== undefined
+        && nextActiveEntry !== undefined
+        && previousActiveEntry.collectionNames.join(",") !== nextActiveEntry.collectionNames.join(",");
+
+      if (activeInstanceId() !== nextInstanceId || collectionSetChanged) {
         await connectToInstance(nextInstanceId);
         return;
       }
@@ -422,6 +477,23 @@ export function ExplorerDebugger(props: ExplorerDebuggerProps): JSX.Element {
 
   onMount(() => {
     void refreshInventory(false);
+
+    if (props.adapter.onInventoryChange) {
+      // Debounce: inventory events can arrive in bursts (e.g. several
+      // collections created in a row); refresh once after they settle.
+      const unsubscribe = props.adapter.onInventoryChange(() => {
+        if (inventoryRefreshTimer !== undefined) {
+          window.clearTimeout(inventoryRefreshTimer);
+        }
+        inventoryRefreshTimer = window.setTimeout(() => {
+          inventoryRefreshTimer = undefined;
+          void refreshInventory(true);
+        }, 300);
+      });
+      onCleanup(() => {
+        unsubscribe();
+      });
+    }
   });
 
   onCleanup(() => {
@@ -429,6 +501,10 @@ export function ExplorerDebugger(props: ExplorerDebuggerProps): JSX.Element {
     if (loadingWatchdogId !== undefined) {
       window.clearTimeout(loadingWatchdogId);
       loadingWatchdogId = undefined;
+    }
+    if (inventoryRefreshTimer !== undefined) {
+      window.clearTimeout(inventoryRefreshTimer);
+      inventoryRefreshTimer = undefined;
     }
     void disconnectDebugger();
   });

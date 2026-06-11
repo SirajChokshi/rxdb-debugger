@@ -40,13 +40,17 @@ export function QueryPanel(props: QueryPanelProps) {
   let prevQueryMode = queryMode();
 
   createEffect(() => {
-    props.debugger.catalog.collectionNames().get().then((names) => {
-      setCollections(names);
-      const first = names[0];
-      if (first && !selectedCollection()) {
-        setSelectedCollection(first);
-      }
-    });
+    props.debugger.catalog.collectionNames().get()
+      .then((names) => {
+        setCollections(names);
+        const first = names[0];
+        if (first && !selectedCollection()) {
+          setSelectedCollection(first);
+        }
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : "Failed to load collections");
+      });
   });
 
   createEffect(() => {
