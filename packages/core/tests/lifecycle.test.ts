@@ -51,6 +51,7 @@ describe("core observable lifecycle", () => {
     expect(startCount).toBe(1);
   });
 
+  // Anchor: host-safety guard for createAsyncObservable (see README Testing).
   test("does not subscribe to live document queries after the outer subscriber is disposed", async () => {
     const dbDeferred = deferred<unknown>();
     let querySubscribeCount = 0;
