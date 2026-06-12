@@ -21,6 +21,10 @@ export interface FromObservableOptions<T> {
  * Convert an RxJS Observable to a Solid signal using Solid's `from` utility.
  * Automatically handles subscription cleanup when the reactive scope is disposed.
  *
+ * The initial value may have a different type than the stream (e.g. `null`
+ * as a "not loaded yet" sentinel that is distinguishable from a legitimate
+ * empty result).
+ *
  * @param observable$ - The RxJS Observable to subscribe to
  * @param options - Options including initial value and error handler
  * @returns A Solid Accessor that tracks the observable's latest value
@@ -31,13 +35,13 @@ export interface FromObservableOptions<T> {
  * return <div>Count: {count()}</div>;
  * ```
  */
-export function fromObservable<T>(
+export function fromObservable<T, I = T>(
   observable$: Observable<T>,
-  options: FromObservableOptions<T>
-): Accessor<T> {
+  options: FromObservableOptions<I>
+): Accessor<T | I> {
   const { initialValue, onError } = options;
 
-  return from<T>((set) => {
+  return from<T | I>((set) => {
     set(() => initialValue);
     let subscription: Subscription | null = null;
 
@@ -55,7 +59,7 @@ export function fromObservable<T>(
     return () => {
       subscription?.unsubscribe();
     };
-  }) as Accessor<T>;
+  }) as Accessor<T | I>;
 }
 
 /**
@@ -75,36 +79,42 @@ export function fromObservable<T>(
  * return <For each={collections()}>{...}</For>;
  * ```
  */
-export function fromExplorerQuery<T>(
+export function fromExplorerQuery<T, I = T>(
   query: ExplorerQuery<T>,
-  options: FromObservableOptions<T>
-): Accessor<T> {
+  options: FromObservableOptions<I>
+): Accessor<T | I> {
   return fromObservable(query.observe(), options);
 }
 
 /**
- * Hook-like wrapper for fromObservable that creates a reactive signal from an observable.
- * Use this when you need to create the observable dynamically based on reactive dependencies.
+ * Like fromObservable, but guards against `getObservable` throwing
+ * synchronously (e.g. when the underlying collection does not exist yet).
  *
- * @param getObservable - Function that returns the observable to subscribe to
- * @param options - Options including initial value and error handler
- * @returns A Solid Accessor that tracks the observable's latest value
+ * Note: the producer runs exactly once per reactive owner. Reading signals
+ * inside `getObservable` does NOT re-subscribe when they change. To derive
+ * the observable from reactive state, create this signal inside a computation
+ * that re-runs (and therefore disposes/resubscribes) when its inputs change:
  *
  * @example
  * ```tsx
- * const documents = createObservableSignal(
- *   () => debugger.documents.list(selectedCollection(), { live: true }).observe(),
- *   { initialValue: [] }
- * );
+ * const documents = createMemo(() => {
+ *   const collection = selectedCollection();
+ *   if (!collection) return null;
+ *   return createObservableSignal(
+ *     () => debugger.documents.list(collection, { live: true }).observe(),
+ *     { initialValue: [] }
+ *   );
+ * });
+ * // read as documents()?.()
  * ```
  */
-export function createObservableSignal<T>(
+export function createObservableSignal<T, I = T>(
   getObservable: () => Observable<T>,
-  options: FromObservableOptions<T>
-): Accessor<T> {
+  options: FromObservableOptions<I>
+): Accessor<T | I> {
   const { initialValue, onError } = options;
 
-  return from<T>((set) => {
+  return from<T | I>((set) => {
     set(() => initialValue);
     let subscription: Subscription | null = null;
 
@@ -131,5 +141,5 @@ export function createObservableSignal<T>(
     return () => {
       subscription?.unsubscribe();
     };
-  }) as Accessor<T>;
+  }) as Accessor<T | I>;
 }

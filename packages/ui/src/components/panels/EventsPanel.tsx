@@ -8,6 +8,8 @@ import { fromObservable } from "../../utils/observable.js";
 
 const OPERATION_TYPES: OperationType[] = ["INSERT", "UPDATE", "DELETE"];
 
+const MAX_RENDERED_EVENTS = 200;
+
 export interface EventsPanelProps {
   theme: Theme;
   debugger: RxdbDebugger;
@@ -58,12 +60,35 @@ export function EventsPanel(props: EventsPanelProps) {
     }
   );
 
+  // The core service keeps a buffer of past events; seed from it so events
+  // recorded while this panel was unmounted (e.g. another tab was active)
+  // are not lost. Newly streamed events are deduped by id.
+  props.debugger.events.history({ limit: MAX_RENDERED_EVENTS }).get()
+    .then((history) => {
+      if (history.length === 0) return;
+      setEvents((prev) => {
+        const knownIds = new Set(prev.map((e) => e.id));
+        // history() returns newest-first; streamed events in `prev` are newer
+        // than anything buffered before mount, so appending keeps order.
+        const merged = [...prev];
+        for (const event of history) {
+          if (!knownIds.has(event.id)) {
+            merged.push(event);
+          }
+        }
+        return merged.slice(0, MAX_RENDERED_EVENTS);
+      });
+    })
+    .catch(() => {
+      // The live stream still works without buffered history.
+    });
+
   createEffect(() => {
     const event = latestEvent();
     if (!event || isPaused()) return;
     if (event.id === lastRenderedEventId) return;
     lastRenderedEventId = event.id;
-    setEvents((prev) => [event, ...prev].slice(0, 200));
+    setEvents((prev) => [event, ...prev].slice(0, MAX_RENDERED_EVENTS));
     setError(null);
   });
 

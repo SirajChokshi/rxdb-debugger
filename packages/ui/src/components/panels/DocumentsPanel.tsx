@@ -56,13 +56,17 @@ export function DocumentsPanel(props: DocumentsPanelProps) {
   });
 
   createEffect(() => {
-    props.debugger.catalog.collectionNames().get().then((names) => {
-      setCollections(names);
-      const first = names[0];
-      if (first && !selectedCollection()) {
-        setSelectedCollection(first);
-      }
-    });
+    props.debugger.catalog.collectionNames().get()
+      .then((names) => {
+        setCollections(names);
+        const first = names[0];
+        if (first && !selectedCollection()) {
+          setSelectedCollection(first);
+        }
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : "Failed to load collections");
+      });
   });
 
   const liveDocuments = createMemo(() => {
@@ -71,8 +75,15 @@ export function DocumentsPanel(props: DocumentsPanelProps) {
     return createObservableSignal(
       () => props.debugger.documents.list(collection, { limit: PAGE_SIZE, live: true }).observe(),
       {
-        initialValue: [] as DocumentResult[],
-        onError: (err) => setError(err instanceof Error ? err.message : "Failed to load documents"),
+        // null = query has not emitted yet, so the loading state survives
+        // until real data (possibly an empty array) arrives.
+        initialValue: null as DocumentResult[] | null,
+        onError: (err) => {
+          setError(err instanceof Error ? err.message : "Failed to load documents");
+          // The stream errored before its first emission; show the error
+          // instead of an everlasting loading state.
+          setIsLoading(false);
+        },
       }
     );
   });
@@ -101,8 +112,10 @@ export function DocumentsPanel(props: DocumentsPanelProps) {
     const docsAccessor = liveDocuments();
     if (docsAccessor) {
       const docs = docsAccessor();
-      setDocuments(docs);
-      setIsLoading(false);
+      if (docs !== null) {
+        setDocuments(docs);
+        setIsLoading(false);
+      }
     }
   });
 

@@ -1,11 +1,69 @@
-import { Observable, from, startWith, scan, map } from "rxjs";
-import { shareReplay } from "rxjs/operators";
+import { EMPTY, Observable, from, of, throwError } from "rxjs";
+import { debounceTime, filter, mergeMap, shareReplay, startWith, switchMap } from "rxjs/operators";
 import { 
   evalInPage, 
   evalAsyncInPage, 
   getCollectionChanges, 
   getBridgeEvents,
 } from "./bridge.js";
+
+/**
+ * Change events are drained from the page in batches; debounce briefly so a
+ * burst of changes triggers a single refetch instead of one per event.
+ */
+const LIVE_REFETCH_DEBOUNCE_MS = 150;
+
+/**
+ * Build a live observable that fetches on subscribe and refetches whenever a
+ * relevant change event arrives. Fetching happens lazily (no work until the
+ * first subscriber) and stops when the last subscriber leaves (refCount).
+ *
+ * Failure semantics depend on whether subscribers already have a value:
+ * - While no value has been produced yet, a failed fetch errors the stream so
+ *   panels can report it instead of showing a loading state forever.
+ * - Once a value exists, failed refetches are dropped: a refetch racing a
+ *   page navigation must not kill the live stream, so the last value stays
+ *   current and the next change event retries.
+ *
+ * @param hasInitialValue - set when the caller prepends a known-good value
+ * (e.g. via startWith); fetch failures are then always treated as transient.
+ */
+function createLiveStream<T>(
+  changes$: Observable<unknown>,
+  fetcher: () => Promise<T>,
+  hasInitialValue = false,
+): Observable<T> {
+  // Persists across refCount restarts on purpose: shareReplay keeps its
+  // buffer, so resubscribers still have a value to look at.
+  let hasEmittedValue = hasInitialValue;
+
+  return changes$.pipe(
+    debounceTime(LIVE_REFETCH_DEBOUNCE_MS),
+    startWith(null),
+    switchMap(() =>
+      from(
+        // Failures are captured at the promise level so an in-flight fetch
+        // whose subscriber switched away or unsubscribed can never surface
+        // as an unhandled rejection.
+        fetcher().then(
+          (value) => ({ ok: true as const, value }),
+          (error: unknown) => ({ ok: false as const, error }),
+        ),
+      ),
+    ),
+    mergeMap((result) => {
+      if (result.ok) {
+        hasEmittedValue = true;
+        return of(result.value);
+      }
+      if (!hasEmittedValue) {
+        return throwError(() => result.error);
+      }
+      return EMPTY;
+    }),
+    shareReplay({ bufferSize: 1, refCount: true }),
+  );
+}
 
 interface RemoteCollectionSchema {
   primaryPath: string;
@@ -261,11 +319,25 @@ function createRemoteCollection(instanceId: string, info: RemoteCollectionInfo) 
 
   const collectionChanges$ = getCollectionChanges(name);
 
-  const liveCount$ = collectionChanges$.pipe(
-    map((event) => (event.operation === "INSERT" ? 1 : event.operation === "DELETE" ? -1 : 0)),
-    scan((acc, delta) => Math.max(0, acc + delta), initialCount),
+  const fetchCount = async (): Promise<number> => {
+    return evalAsyncInPage<number>(`
+      (async () => {
+        const registry = window.__RXDB_DEBUGGER__;
+        const db = registry?.getInstanceHandle?.(${instanceIdLiteral});
+        const col = db?.collections?.[${collectionNameLiteral}];
+        if (!col) return 0;
+        return col.count().exec();
+      })()
+    `);
+  };
+
+  // Re-count from the source of truth on every change instead of replaying
+  // deltas: dropped or replayed events can never make the count drift.
+  // initialCount is emitted synchronously so first paint doesn't wait for an
+  // eval roundtrip — and because subscribers always have that value, fetch
+  // failures here are always transient (hasInitialValue).
+  const liveCount$ = createLiveStream(collectionChanges$, fetchCount, true).pipe(
     startWith(initialCount),
-    shareReplay(1)
   );
 
   return {
@@ -282,17 +354,7 @@ function createRemoteCollection(instanceId: string, info: RemoteCollectionInfo) 
 
     count() {
       return {
-        exec: async () => {
-          return evalAsyncInPage<number>(`
-            (async () => {
-              const registry = window.__RXDB_DEBUGGER__;
-              const db = registry?.getInstanceHandle?.(${instanceIdLiteral});
-              const col = db?.collections?.[${collectionNameLiteral}];
-              if (!col) return 0;
-              return col.count().exec();
-            })()
-          `);
-        },
+        exec: fetchCount,
         $: liveCount$,
       };
     },
@@ -345,7 +407,10 @@ function createRemoteQuery(
     },
     exec: fetchDocs,
     get $(): Observable<unknown[]> {
-      return from(fetchDocs()).pipe(shareReplay(1));
+      // Live like a real RxQuery: fetch on subscribe, refetch on changes to
+      // this collection. Previously this emitted once and completed, so the
+      // Documents panel never updated after the initial load.
+      return createLiveStream(getCollectionChanges(collectionName), fetchDocs);
     },
   };
 
@@ -378,10 +443,15 @@ function createRemoteFindOne(
     return plainDoc ? wrapDocument(plainDoc, collectionRef) : null;
   };
 
+  // Only changes to this specific document can affect the result.
+  const relevantChanges$ = getCollectionChanges(collectionName).pipe(
+    filter((event) => primary !== undefined && event.documentId === primary),
+  );
+
   return {
     exec: fetchDoc,
     get $(): Observable<unknown | null> {
-      return from(fetchDoc()).pipe(shareReplay(1));
+      return createLiveStream(relevantChanges$, fetchDoc);
     },
   };
 }

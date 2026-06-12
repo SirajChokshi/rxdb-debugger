@@ -7,7 +7,7 @@ import {
   removeRemoteDatabaseInstance,
   waitForRegistry,
 } from "./remote-db";
-import { disposeBridge, initBridge } from "./bridge";
+import { disposeBridge, getInventoryEvents, initBridge } from "./bridge";
 import "./styles.css";
 
 function getDevToolsTheme(): "light" | "dark" {
@@ -42,6 +42,13 @@ function createExtensionAdapter(): ExplorerDebuggerAdapter {
     },
     async removeInstance(instanceId: string) {
       return removeRemoteDatabaseInstance(instanceId);
+    },
+    onInventoryChange(listener: () => void) {
+      // Refresh the explorer when the inspected page destroys/recreates a
+      // database or changes its collection set, instead of showing stale data
+      // until a manual refresh.
+      const subscription = getInventoryEvents().subscribe(() => listener());
+      return () => subscription.unsubscribe();
     },
   };
 }
