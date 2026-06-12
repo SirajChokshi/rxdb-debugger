@@ -67,6 +67,25 @@ Build the extension with `bun run build:ext`. Call `installRxdbDebuggerAutoDisco
 | `bun run dev` | Watch library packages during development |
 | `bun run typecheck` | Type-check all workspaces |
 | `bun run lint` | Run oxlint across the repo |
+| `bun run test` | Run the Bun test suite (CI gate) |
+
+## Testing
+
+The suite has two orthogonal failure classes. Neither subsumes the other.
+
+| Class | What breaks | Anchor test |
+| --- | --- | --- |
+| Core async lifecycle | Leaked RxDB subscriptions in the host app after UI teardown | `does not subscribe to live document queries after the outer subscriber is disposed` in [`packages/core/tests/lifecycle.test.ts`](packages/core/tests/lifecycle.test.ts) |
+| Bridge protocol | DevTools panel receives no data from the inspected page | `drains queued page bridge events from the inspected RxDB instance` in [`packages/chrome-extension/tests/bridge.test.ts`](packages/chrome-extension/tests/bridge.test.ts) |
+
+The lifecycle test is negative-only: it proves unplugging the debugger does not leave ghost subscriptions behind. The bridge test is positive-only: it proves collection and change events actually reach the extension.
+
+If you must keep a single test, pick by lens:
+
+- **Host safety** (embedded UI / headless API): keep the lifecycle test. `createAsyncObservable` has six call sites and only this dedicated guard.
+- **Product smoke** (Chrome DevTools): keep the bridge drain test. It is the only end-to-end proof that data flows.
+
+The minimum viable pair for CI is both anchor tests above.
 
 ## Design
 

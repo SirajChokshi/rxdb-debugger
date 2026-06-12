@@ -215,6 +215,7 @@ afterEach(async () => {
 });
 
 describe("bridge communication protocol", () => {
+  // Anchor: product-smoke guard for bridge delivery (see README Testing).
   test("drains queued page bridge events from the inspected RxDB instance", async () => {
     const events: BridgeEvent[] = [];
     const subscription = getBridgeEvents().subscribe((event) => {
