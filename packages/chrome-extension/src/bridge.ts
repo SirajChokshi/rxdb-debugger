@@ -525,7 +525,12 @@ function startPolling(sessionId: string, instanceId: string): void {
         if (events === null) {
           // Page bridge is gone (navigation without a panel remount, or
           // page-side heartbeat timeout). Re-inject to self-heal.
-          await injectPageBridge(sessionId, instanceId).catch(() => {
+          await enqueueOperation(async () => {
+            if (activeSessionId !== sessionId || activeInstanceId !== instanceId) {
+              return;
+            }
+            await injectPageBridge(sessionId, instanceId);
+          }).catch(() => {
             // Page may be mid-navigation; retry on the next tick.
           });
           return;
