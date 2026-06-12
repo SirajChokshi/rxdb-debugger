@@ -78,7 +78,12 @@ export function DocumentsPanel(props: DocumentsPanelProps) {
         // null = query has not emitted yet, so the loading state survives
         // until real data (possibly an empty array) arrives.
         initialValue: null as DocumentResult[] | null,
-        onError: (err) => setError(err instanceof Error ? err.message : "Failed to load documents"),
+        onError: (err) => {
+          setError(err instanceof Error ? err.message : "Failed to load documents");
+          // The stream errored before its first emission; show the error
+          // instead of an everlasting loading state.
+          setIsLoading(false);
+        },
       }
     );
   });

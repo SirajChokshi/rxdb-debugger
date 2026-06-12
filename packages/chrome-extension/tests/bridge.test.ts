@@ -783,6 +783,135 @@ describe("remote database live observables", () => {
     subscription.unsubscribe();
   });
 
+  test("query.$ surfaces an initial fetch failure instead of loading forever", async () => {
+    await initBridge("instance-1");
+    const remoteDb = await createRemoteDatabase("instance-1") as {
+      collections: Record<string, {
+        find(): { $: {
+          subscribe(observer: {
+            next(docs: unknown[]): void;
+            error(error: unknown): void;
+          }): { unsubscribe(): void };
+        } };
+      }>;
+    };
+
+    harness.heroes.find = () => {
+      throw new Error("find exploded");
+    };
+
+    const emissions: unknown[][] = [];
+    const errors: unknown[] = [];
+    const subscription = remoteDb.collections.heroes!.find().$.subscribe({
+      next: (docs) => emissions.push(docs),
+      error: (error) => errors.push(error),
+    });
+
+    await sleep(150);
+
+    expect(emissions).toHaveLength(0);
+    expect(errors).toHaveLength(1);
+    expect(String((errors[0] as Error).message)).toContain("find exploded");
+
+    subscription.unsubscribe();
+  });
+
+  test("query.$ keeps the last value when a refetch fails mid-session", async () => {
+    await initBridge("instance-1");
+    const remoteDb = await createRemoteDatabase("instance-1") as {
+      collections: Record<string, {
+        find(): { $: {
+          subscribe(observer: {
+            next(docs: unknown[]): void;
+            error(error: unknown): void;
+          }): { unsubscribe(): void };
+        } };
+      }>;
+    };
+
+    const emissions: unknown[][] = [];
+    const errors: unknown[] = [];
+    const subscription = remoteDb.collections.heroes!.find().$.subscribe({
+      next: (docs) => emissions.push(docs),
+      error: (error) => errors.push(error),
+    });
+
+    await sleep(150);
+    expect(emissions).toHaveLength(1);
+
+    // A refetch triggered by a change event fails (e.g. navigation race):
+    // the stream must neither error nor lose its last value.
+    const workingFind = harness.heroes.find;
+    harness.heroes.find = () => {
+      throw new Error("transient failure");
+    };
+    harness.heroes.emit({
+      operation: "INSERT",
+      documentId: "hero-x",
+      documentData: { id: "hero-x" },
+    });
+    await harness.runIntervals(BRIDGE_POLL_INTERVAL_MS);
+    await sleep(400);
+
+    expect(errors).toHaveLength(0);
+    expect(emissions).toHaveLength(1);
+
+    // The next change event retries and recovers.
+    harness.heroes.find = workingFind;
+    harness.heroes.docs.push({ id: "hero-2", name: "Grace" });
+    harness.heroes.emit({
+      operation: "INSERT",
+      documentId: "hero-2",
+      documentData: { id: "hero-2", name: "Grace" },
+    });
+    await harness.runIntervals(BRIDGE_POLL_INTERVAL_MS);
+    await sleep(400);
+
+    expect(errors).toHaveLength(0);
+    expect(emissions).toHaveLength(2);
+    expect(emissions[1]).toHaveLength(2);
+
+    subscription.unsubscribe();
+  });
+
+  test("count().$ falls back to the connect-time count when recounting fails", async () => {
+    await initBridge("instance-1");
+    const remoteDb = await createRemoteDatabase("instance-1") as {
+      collections: Record<string, {
+        count(): { $: {
+          subscribe(observer: {
+            next(count: number): void;
+            error(error: unknown): void;
+          }): { unsubscribe(): void };
+        } };
+      }>;
+    };
+
+    // Counts always have the connect-time snapshot as a known-good value, so
+    // a failing recount must stay silent rather than error the stream.
+    harness.heroes.count = () => ({
+      exec: async () => {
+        throw new Error("count exploded");
+      },
+    });
+
+    const counts: number[] = [];
+    const errors: unknown[] = [];
+    const subscription = remoteDb.collections.heroes!.count().$.subscribe({
+      next: (count) => counts.push(count),
+      error: (error) => errors.push(error),
+    });
+
+    expect(counts).toEqual([1]);
+
+    await sleep(150);
+
+    expect(errors).toHaveLength(0);
+    expect(counts).toEqual([1]);
+
+    subscription.unsubscribe();
+  });
+
   test("count().$ recounts from the page when change events arrive", async () => {
     await initBridge("instance-1");
     const remoteDb = await createRemoteDatabase("instance-1") as {
