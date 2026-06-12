@@ -38,7 +38,9 @@ interface Album {
   releaseYear: number;
   genre: string;
   coverUrl: string;
+  label?: string;
   totalTracks: number;
+  durationMs?: number;
 }
 
 interface Song {
@@ -176,6 +178,7 @@ export default function App(): JSX.Element {
   const [createPlaylistOpen, setCreatePlaylistOpen] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState("");
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
+  const [selectedAlbumId, setSelectedAlbumId] = useState<string | null>(null);
 
   const debuggerRef = useRef<HTMLDivElement>(null);
   const isResizingRef = useRef(false);
@@ -335,6 +338,13 @@ export default function App(): JSX.Element {
   }, [db]);
 
   useEffect(() => {
+    if (!selectedAlbumId) return;
+    if (!albums.some((album) => album.id === selectedAlbumId)) {
+      setSelectedAlbumId(null);
+    }
+  }, [albums, selectedAlbumId]);
+
+  useEffect(() => {
     if (!selectedPlaylistId) return;
     if (!playlists.some((playlist) => playlist.id === selectedPlaylistId)) {
       setSelectedPlaylistId(null);
@@ -447,6 +457,7 @@ export default function App(): JSX.Element {
     setIsSeeded(false);
     setCurrentSong(null);
     setSelectedArtist(null);
+    setSelectedAlbumId(null);
     setSelectedPlaylistId(null);
     setCreatePlaylistOpen(false);
     setNewPlaylistName("");
@@ -486,7 +497,15 @@ export default function App(): JSX.Element {
   const handleOpenPlaylist = useCallback((playlistId: string) => {
     setSelectedPlaylistId(playlistId);
     setSelectedArtist(null);
+    setSelectedAlbumId(null);
     setActiveView("playlists");
+  }, []);
+
+  const handleOpenAlbum = useCallback((albumId: string) => {
+    setSelectedAlbumId(albumId);
+    setSelectedArtist(null);
+    setSelectedPlaylistId(null);
+    setActiveView("albums");
   }, []);
 
   const handleAddSongToPlaylist = useCallback(async (playlistId: string, songId: string) => {
@@ -631,6 +650,10 @@ export default function App(): JSX.Element {
 
   const artistSongs = selectedArtist ? songs.filter(s => s.artistId === selectedArtist.id) : [];
   const artistAlbums = selectedArtist ? albums.filter(a => a.artistId === selectedArtist.id) : [];
+  const selectedAlbum = selectedAlbumId ? albums.find((album) => album.id === selectedAlbumId) || null : null;
+  const albumSongs = selectedAlbum
+    ? songs.filter((song) => song.albumId === selectedAlbum.id).sort((a, b) => a.trackNumber - b.trackNumber)
+    : [];
   const selectedPlaylist = selectedPlaylistId ? playlists.find((playlist) => playlist.id === selectedPlaylistId) || null : null;
   const userById = new Map(users.map((user) => [user.id, user]));
   const songById = new Map(songs.map((song) => [song.id, song]));
@@ -707,10 +730,10 @@ export default function App(): JSX.Element {
           </div>
 
           <nav className="flex flex-col gap-1">
-            <NavButton active={activeView === "home"} onClick={() => { setActiveView("home"); setSelectedArtist(null); setSelectedPlaylistId(null); }}>
+            <NavButton active={activeView === "home"} onClick={() => { setActiveView("home"); setSelectedArtist(null); setSelectedAlbumId(null); setSelectedPlaylistId(null); }}>
               <HomeIcon /> Home
             </NavButton>
-            <NavButton active={activeView === "songs"} onClick={() => { setActiveView("songs"); setSelectedArtist(null); setSelectedPlaylistId(null); }}>
+            <NavButton active={activeView === "songs"} onClick={() => { setActiveView("songs"); setSelectedArtist(null); setSelectedAlbumId(null); setSelectedPlaylistId(null); }}>
               <MusicIcon /> All Songs
             </NavButton>
           </nav>
@@ -727,13 +750,13 @@ export default function App(): JSX.Element {
               </button>
             </div>
             <nav className="flex flex-col gap-1">
-              <NavButton active={activeView === "artists"} onClick={() => { setActiveView("artists"); setSelectedArtist(null); setSelectedPlaylistId(null); }}>
+              <NavButton active={activeView === "artists"} onClick={() => { setActiveView("artists"); setSelectedArtist(null); setSelectedAlbumId(null); setSelectedPlaylistId(null); }}>
                 <ArtistIcon /> Artists
               </NavButton>
-              <NavButton active={activeView === "albums"} onClick={() => { setActiveView("albums"); setSelectedArtist(null); setSelectedPlaylistId(null); }}>
+              <NavButton active={activeView === "albums"} onClick={() => { setActiveView("albums"); setSelectedArtist(null); setSelectedAlbumId(null); setSelectedPlaylistId(null); }}>
                 <AlbumIcon /> Albums
               </NavButton>
-              <NavButton active={activeView === "playlists"} onClick={() => { setActiveView("playlists"); setSelectedArtist(null); setSelectedPlaylistId(null); }}>
+              <NavButton active={activeView === "playlists"} onClick={() => { setActiveView("playlists"); setSelectedArtist(null); setSelectedAlbumId(null); setSelectedPlaylistId(null); }}>
                 <PlaylistIcon /> Playlists
               </NavButton>
             </nav>
@@ -785,7 +808,7 @@ export default function App(): JSX.Element {
         >
           {/* Main Content */}
           <main className="flex-1 overflow-y-auto bg-linear-to-b from-neutral-900 to-black">
-            {activeView === "home" && <HomeView artists={artists} albums={albums} songs={songs} onPlaySong={(song) => { void handlePlaySong(song); }} onSelectArtist={(a) => { setSelectedArtist(a); setActiveView("artists"); }} />}
+            {activeView === "home" && <HomeView artists={artists} albums={albums} songs={songs} onPlaySong={(song) => { void handlePlaySong(song); }} onSelectArtist={(a) => { setSelectedArtist(a); setSelectedAlbumId(null); setActiveView("artists"); }} onSelectAlbum={handleOpenAlbum} />}
             {activeView === "artists" && !selectedArtist && <ArtistsGrid artists={artists} onSelect={setSelectedArtist} />}
             {activeView === "artists" && selectedArtist && (
               <ArtistDetail
@@ -793,11 +816,24 @@ export default function App(): JSX.Element {
                 albums={artistAlbums}
                 songs={artistSongs}
                 onBack={() => setSelectedArtist(null)}
+                onSelectAlbum={handleOpenAlbum}
                 onPlaySong={(song) => { void handlePlaySong(song); }}
                 currentSong={currentSong}
               />
             )}
-            {activeView === "albums" && <AlbumsGrid albums={albums} getArtistName={getArtistName} />}
+            {activeView === "albums" && !selectedAlbum && (
+              <AlbumsGrid albums={albums} getArtistName={getArtistName} onSelectAlbum={handleOpenAlbum} />
+            )}
+            {activeView === "albums" && selectedAlbum && (
+              <AlbumDetailView
+                album={selectedAlbum}
+                songs={albumSongs}
+                getArtistName={getArtistName}
+                onBack={() => setSelectedAlbumId(null)}
+                onPlaySong={(song) => { void handlePlaySong(song); }}
+                currentSong={currentSong}
+              />
+            )}
             {activeView === "songs" && <SongsView songs={songs} getArtistName={getArtistName} getAlbumTitle={getAlbumTitle} onPlaySong={(song) => { void handlePlaySong(song); }} currentSong={currentSong} />}
             {activeView === "playlists" && !selectedPlaylist && (
               <PlaylistsView
@@ -1241,12 +1277,13 @@ function FriendsSidebar({
   );
 }
 
-function HomeView({ artists, albums, songs, onPlaySong, onSelectArtist }: {
+function HomeView({ artists, albums, songs, onPlaySong, onSelectArtist, onSelectAlbum }: {
   artists: Artist[];
   albums: Album[];
   songs: Song[];
   onPlaySong: (song: Song) => void;
   onSelectArtist: (artist: Artist) => void;
+  onSelectAlbum: (albumId: string) => void;
 }) {
   const topSongs = [...songs].sort((a, b) => b.playCount - a.playCount).slice(0, 6);
   const featuredArtists = artists.slice(0, 6);
@@ -1324,7 +1361,11 @@ function HomeView({ artists, albums, songs, onPlaySong, onSelectArtist }: {
         <h2 className="text-2xl font-bold mb-4">Featured Albums</h2>
         <div className="grid grid-cols-5 gap-6">
           {albums.slice(0, 5).map((album) => (
-            <div key={album.id} className="group">
+            <button
+              key={album.id}
+              onClick={() => onSelectAlbum(album.id)}
+              className="group text-left rounded-lg p-3 -m-3 hover:bg-neutral-800/50 transition-colors"
+            >
               <div className="aspect-square bg-neutral-800 rounded-lg mb-3 overflow-hidden relative">
                 <AlbumCoverImage
                   src={album.coverUrl}
@@ -1332,13 +1373,13 @@ function HomeView({ artists, albums, songs, onPlaySong, onSelectArtist }: {
                   className="w-full h-full object-cover"
                   fallbackClassName="bg-neutral-800 text-neutral-500 flex items-center justify-center text-4xl"
                 />
-                <button className="absolute bottom-2 right-2 w-12 h-12 bg-green-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all shadow-xl">
+                <span className="absolute bottom-2 right-2 w-12 h-12 bg-green-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all shadow-xl text-black">
                   <PlayIcon />
-                </button>
+                </span>
               </div>
               <p className="font-medium truncate">{album.title}</p>
               <p className="text-neutral-400 text-sm truncate">{album.releaseYear}</p>
-            </div>
+            </button>
           ))}
         </div>
       </section>
@@ -1367,11 +1408,12 @@ function ArtistsGrid({ artists, onSelect }: { artists: Artist[]; onSelect: (arti
   );
 }
 
-function ArtistDetail({ artist, albums, songs, onBack, onPlaySong, currentSong }: {
+function ArtistDetail({ artist, albums, songs, onBack, onSelectAlbum, onPlaySong, currentSong }: {
   artist: Artist;
   albums: Album[];
   songs: Song[];
   onBack: () => void;
+  onSelectAlbum: (albumId: string) => void;
   onPlaySong: (song: Song) => void;
   currentSong: Song | null;
 }) {
@@ -1449,7 +1491,11 @@ function ArtistDetail({ artist, albums, songs, onBack, onPlaySong, currentSong }
             <h2 className="text-xl font-bold mb-4">Discography</h2>
             <div className="grid grid-cols-5 gap-6">
               {albums.map((album) => (
-                <div key={album.id} className="group">
+                <button
+                  key={album.id}
+                  onClick={() => onSelectAlbum(album.id)}
+                  className="group text-left rounded-lg p-3 -m-3 hover:bg-neutral-800/50 transition-colors"
+                >
                   <div className="aspect-square bg-neutral-800 rounded-lg mb-3 overflow-hidden">
                     <AlbumCoverImage
                       src={album.coverUrl}
@@ -1460,7 +1506,7 @@ function ArtistDetail({ artist, albums, songs, onBack, onPlaySong, currentSong }
                   </div>
                   <p className="font-medium truncate">{album.title}</p>
                   <p className="text-neutral-400 text-sm">{album.releaseYear} • Album</p>
-                </div>
+                </button>
               ))}
             </div>
           </section>
@@ -1470,28 +1516,148 @@ function ArtistDetail({ artist, albums, songs, onBack, onPlaySong, currentSong }
   );
 }
 
-function AlbumsGrid({ albums, getArtistName }: { albums: Album[]; getArtistName: (id: string) => string }) {
+function AlbumsGrid({
+  albums,
+  getArtistName,
+  onSelectAlbum,
+}: {
+  albums: Album[];
+  getArtistName: (id: string) => string;
+  onSelectAlbum: (albumId: string) => void;
+}) {
   return (
     <div className="p-8">
-      <h1 className="text-3xl font-bold mb-6">Albums</h1>
-      <div className="grid grid-cols-5 gap-6">
-        {albums.map((album) => (
-          <div key={album.id} className="group">
-            <div className="aspect-square bg-neutral-800 rounded-lg mb-3 overflow-hidden relative shadow-lg">
-              <AlbumCoverImage
-                src={album.coverUrl}
-                alt={album.title}
-                className="w-full h-full object-cover"
-                fallbackClassName="bg-neutral-800 text-neutral-500 flex items-center justify-center text-4xl"
-              />
-              <button className="absolute bottom-2 right-2 w-12 h-12 bg-green-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all shadow-xl text-black">
-                <PlayIcon />
-              </button>
-            </div>
-            <p className="font-medium truncate">{album.title}</p>
-            <p className="text-neutral-400 text-sm truncate">{getArtistName(album.artistId)}</p>
+      <div className="mb-6">
+        <p className="text-sm uppercase tracking-widest text-neutral-400 mb-2">Library</p>
+        <h1 className="text-3xl font-bold">Albums</h1>
+      </div>
+
+      {albums.length === 0 ? (
+        <div className="border border-dashed border-neutral-700 rounded-xl p-10 text-center bg-neutral-900/40">
+          <p className="text-xl font-semibold mb-2">No albums yet</p>
+          <p className="text-neutral-400">Load the demo data to browse the album library.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-5 gap-6">
+          {albums.map((album) => (
+            <button
+              key={album.id}
+              onClick={() => onSelectAlbum(album.id)}
+              className="group text-left rounded-lg p-3 hover:bg-neutral-800/60 transition-colors"
+            >
+              <div className="aspect-square bg-neutral-800 rounded-lg mb-3 overflow-hidden relative shadow-lg">
+                <AlbumCoverImage
+                  src={album.coverUrl}
+                  alt={album.title}
+                  className="w-full h-full object-cover"
+                  fallbackClassName="bg-neutral-800 text-neutral-500 flex items-center justify-center text-4xl"
+                />
+                <span className="absolute bottom-2 right-2 w-12 h-12 bg-green-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all shadow-xl text-black">
+                  <PlayIcon />
+                </span>
+              </div>
+              <p className="font-medium truncate">{album.title}</p>
+              <p className="text-neutral-400 text-sm truncate">{getArtistName(album.artistId)}</p>
+              <p className="text-neutral-500 text-xs truncate">{album.releaseYear} • {album.totalTracks} tracks</p>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AlbumDetailView({
+  album,
+  songs,
+  getArtistName,
+  onBack,
+  onPlaySong,
+  currentSong,
+}: {
+  album: Album;
+  songs: Song[];
+  getArtistName: (id: string) => string;
+  onBack: () => void;
+  onPlaySong: (song: Song) => void;
+  currentSong: Song | null;
+}) {
+  const totalDurationMs = songs.reduce((sum, song) => sum + song.durationMs, 0);
+  const displayDurationMs = totalDurationMs || album.durationMs || 0;
+
+  return (
+    <div>
+      <div className="min-h-80 bg-linear-to-b from-indigo-900 to-transparent p-8 flex items-end">
+        <div className="flex items-end gap-6">
+          <AlbumCoverImage
+            src={album.coverUrl}
+            alt={album.title}
+            className="w-48 h-48 rounded-lg object-cover shadow-2xl border border-white/10"
+            fallbackClassName="bg-neutral-800 text-neutral-500 flex items-center justify-center text-6xl"
+          />
+          <div>
+            <button onClick={onBack} className="text-neutral-300 hover:text-white mb-4 text-sm flex items-center gap-1">
+              ← Back
+            </button>
+            <p className="text-xs uppercase tracking-widest text-neutral-300 mb-2">Album</p>
+            <h1 className="text-6xl font-bold mb-3">{album.title}</h1>
+            <p className="text-neutral-300">
+              {getArtistName(album.artistId)} • {album.releaseYear} • {songs.length || album.totalTracks} tracks
+              {displayDurationMs > 0 ? ` • ${formatDuration(displayDurationMs)}` : ""}
+            </p>
+            <p className="text-neutral-400 text-sm mt-2">
+              {album.genre}{album.label ? ` • ${album.label}` : ""}
+            </p>
           </div>
-        ))}
+        </div>
+      </div>
+
+      <div className="p-8">
+        <div className="flex items-center gap-4 mb-8">
+          <button
+            onClick={() => songs[0] && onPlaySong(songs[0])}
+            disabled={songs.length === 0}
+            className="w-14 h-14 bg-green-500 rounded-full flex items-center justify-center text-black hover:scale-105 transition-transform shadow-xl disabled:opacity-50 disabled:hover:scale-100"
+          >
+            <PlayIcon />
+          </button>
+        </div>
+
+        <div className="flex items-center gap-4 px-4 py-2 border-b border-neutral-800 text-neutral-400 text-sm mb-2">
+          <span className="w-8 text-center">#</span>
+          <span className="flex-1">Title</span>
+          <span className="w-24 text-right">Plays</span>
+          <span className="w-16 text-right">⏱</span>
+        </div>
+
+        {songs.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-neutral-700 p-10 text-center text-neutral-400">
+            No songs found for this album.
+          </div>
+        ) : (
+          <div className="flex flex-col">
+            {songs.map((song) => (
+              <button
+                key={song.id}
+                onClick={() => onPlaySong(song)}
+                className={`flex items-center gap-4 px-4 py-2 rounded hover:bg-neutral-800/50 transition-colors text-left group ${
+                  currentSong?.id === song.id ? "bg-neutral-800/60" : ""
+                }`}
+              >
+                <span className="w-8 text-neutral-500 text-center text-sm group-hover:hidden">{song.trackNumber}</span>
+                <span className="w-8 text-center hidden group-hover:block"><PlayIcon /></span>
+                <div className="flex-1 min-w-0">
+                  <p className={`font-medium truncate ${currentSong?.id === song.id ? "text-green-500" : ""}`}>
+                    {song.title}
+                  </p>
+                  <p className="text-neutral-400 text-sm truncate">{getArtistName(song.artistId)}</p>
+                </div>
+                <span className="w-24 text-neutral-500 text-sm text-right">{formatPlayCount(song.playCount)}</span>
+                <span className="w-16 text-neutral-500 text-sm text-right">{formatDuration(song.durationMs)}</span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
